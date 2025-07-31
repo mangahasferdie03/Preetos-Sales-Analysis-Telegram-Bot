@@ -25,52 +25,27 @@ class TelegramGoogleSheetsBot:
         # Initialize Google Sheets client
         try:
             # Check if we're on Railway (env vars) or local (file)
-            if os.getenv('GOOGLE_PRIVATE_KEY'):
-                # Railway environment - create credentials from env vars
+            if os.getenv('GOOGLE_CREDENTIALS_B64'):
+                # Railway environment - create credentials from base64 env var
                 from google.oauth2 import service_account
                 import json
+                import base64
                 
-                # Handle private key format
-                raw_private_key = os.getenv('GOOGLE_PRIVATE_KEY')
-                print(f"Raw private key length: {len(raw_private_key) if raw_private_key else 0}")
+                logger.info("Using base64 encoded credentials from Railway")
                 
-                # Try different newline replacements
-                private_key_attempts = [
-                    raw_private_key.replace('\\n', '\n'),  # Replace literal \n with actual newlines
-                    raw_private_key.replace('\\\\n', '\n'),  # Replace escaped \\n
-                    raw_private_key,  # Use as-is
-                ]
+                credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_B64')
+                if not credentials_b64:
+                    raise ValueError("GOOGLE_CREDENTIALS_B64 environment variable is required")
                 
-                creds_data = {
-                    "type": "service_account",
-                    "project_id": "preetos-order-agent",
-                    "private_key_id": "52ef2c399f9d49f7b6af42f061b10706419aeb89",
-                    "private_key": "",  # Will be set below
-                    "client_email": "preeetos-sheets-agent@preetos-order-agent.iam.gserviceaccount.com",
-                    "client_id": "114633176250172838577",
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", 
-                    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/preeetos-sheets-agent%40preetos-order-agent.iam.gserviceaccount.com",
-                    "universe_domain": "googleapis.com"
-                }
+                try:
+                    # Decode base64 credentials
+                    credentials_json = base64.b64decode(credentials_b64).decode('utf-8')
+                    creds_data = json.loads(credentials_json)
+                    logger.info("Base64 credentials decoded successfully")
+                except Exception as e:
+                    raise ValueError(f"Failed to decode base64 credentials: {e}")
                 
-                # Try each private key format until one works
-                for i, key_attempt in enumerate(private_key_attempts):
-                    print(f"Trying private key format {i+1}...")
-                    creds_data["private_key"] = key_attempt
-                    try:
-                        # Test if this format works
-                        test_creds = service_account.Credentials.from_service_account_info(
-                            creds_data, scopes=['https://www.googleapis.com/auth/spreadsheets']
-                        )
-                        print(f"Private key format {i+1} worked!")
-                        break
-                    except Exception as e:
-                        print(f"Private key format {i+1} failed: {e}")
-                        if i == len(private_key_attempts) - 1:
-                            raise ValueError(f"All private key formats failed. Last error: {e}")
-                
+                # Create credentials from decoded JSON
                 creds = service_account.Credentials.from_service_account_info(
                     creds_data, scopes=['https://www.googleapis.com/auth/spreadsheets']
                 )
@@ -896,11 +871,11 @@ def main():
             raise ValueError("Anthropic API key not found in environment variables or secret key.txt")
         
         # Debug environment variables (without showing full values)
-        print(f"Environment check:")
-        print(f"TELEGRAM_BOT_TOKEN: {'✅' if telegram_token else '❌'}")
-        print(f"ANTHROPIC_API_KEY: {'✅' if anthropic_key else '❌'}")
-        print(f"GOOGLE_PRIVATE_KEY: {'✅' if os.getenv('GOOGLE_PRIVATE_KEY') else '❌'}")
-        print(f"SPREADSHEET_ID: {os.getenv('SPREADSHEET_ID', 'using default')}")
+        logger.info("Environment check:")
+        logger.info(f"TELEGRAM_BOT_TOKEN: {'✅' if telegram_token else '❌'}")
+        logger.info(f"ANTHROPIC_API_KEY: {'✅' if anthropic_key else '❌'}")
+        logger.info(f"GOOGLE_CREDENTIALS_B64: {'✅' if os.getenv('GOOGLE_CREDENTIALS_B64') else '❌'}")
+        logger.info(f"SPREADSHEET_ID: {os.getenv('SPREADSHEET_ID', 'using default')}")
         
         # Set up configuration
         credentials_file = 'credentials.json'
