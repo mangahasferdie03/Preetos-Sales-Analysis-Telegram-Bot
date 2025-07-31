@@ -8,33 +8,30 @@ def main():
     print("Starting Google Sheets API service...")
     
     try:
-        # Get credentials from environment variable
-        credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+        # Get credentials from individual environment variables
         spreadsheet_id = os.getenv('SPREADSHEET_ID', 'your_default_spreadsheet_id')
         
-        if not credentials_json:
-            raise ValueError("GOOGLE_CREDENTIALS_JSON environment variable is required")
+        print("Creating credentials from individual environment variables...")
         
-        print("Creating credentials from environment variable...")
+        # Build credentials dict from individual env vars
+        creds_data = {
+            "type": "service_account",
+            "project_id": "preetos-order-agent",
+            "private_key_id": "52ef2c399f9d49f7b6af42f061b10706419aeb89",
+            "private_key": os.getenv('GOOGLE_PRIVATE_KEY', '').replace('\\n', '\n'),
+            "client_email": "preeetos-sheets-agent@preetos-order-agent.iam.gserviceaccount.com",
+            "client_id": "114633176250172838577",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/preeetos-sheets-agent%40preetos-order-agent.iam.gserviceaccount.com",
+            "universe_domain": "googleapis.com"
+        }
         
-        # Create credentials directly from environment variable
-        # Parse the JSON string with proper error handling
-        try:
-            # Handle potential escaping issues
-            if credentials_json.startswith('"') and credentials_json.endswith('"'):
-                credentials_json = credentials_json[1:-1]  # Remove outer quotes
-            
-            # Replace escaped quotes and newlines
-            credentials_json = credentials_json.replace('\\"', '"')
-            credentials_json = credentials_json.replace('\\n', '\n')
-            
-            creds_data = json.loads(credentials_json)
-            print("JSON parsed successfully")
-            
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error: {e}")
-            print(f"First 100 chars of credentials: {credentials_json[:100]}")
-            raise
+        if not creds_data["private_key"]:
+            raise ValueError("GOOGLE_PRIVATE_KEY environment variable is required")
+        
+        print("Credentials created successfully")
         
         # Create credentials object directly
         scopes = ['https://www.googleapis.com/auth/spreadsheets']
