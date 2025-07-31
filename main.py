@@ -15,13 +15,19 @@ def main():
             # Save credentials to temporary file for the client
             with open('temp_credentials.json', 'w') as f:
                 f.write(credentials_json)
-            credentials_path = 'temp_credentials.json'
+            credentials_file = 'temp_credentials.json'
         else:
-            credentials_path = 'credentials.json'
+            credentials_file = 'credentials.json'
             print("Using credentials from file")
         
+        # Get spreadsheet ID from environment or use a default
+        spreadsheet_id = os.getenv('SPREADSHEET_ID', 'your_default_spreadsheet_id')
+        
         # Initialize client
-        client = GoogleSheetsClient(credentials_path=credentials_path)
+        client = GoogleSheetsClient(
+            credentials_file=credentials_file,
+            spreadsheet_id=spreadsheet_id
+        )
         print("Google Sheets client initialized successfully")
         
         # Basic health check - you can customize this
