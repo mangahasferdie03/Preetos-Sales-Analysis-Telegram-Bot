@@ -12,16 +12,23 @@ def main():
         credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
         if credentials_json:
             print("Using credentials from environment variable")
-            # Save credentials to temporary file for the client
-            with open('temp_credentials.json', 'w') as f:
-                f.write(credentials_json)
-            credentials_file = 'temp_credentials.json'
+            # Parse the JSON string and write it properly formatted
+            try:
+                creds_data = json.loads(credentials_json)
+                with open('temp_credentials.json', 'w') as f:
+                    json.dump(creds_data, f, indent=2)
+                credentials_file = 'temp_credentials.json'
+                print("Credentials file created successfully")
+            except json.JSONDecodeError as e:
+                print(f"Error parsing credentials JSON: {e}")
+                raise
         else:
             credentials_file = 'credentials.json'
             print("Using credentials from file")
         
         # Get spreadsheet ID from environment or use a default
         spreadsheet_id = os.getenv('SPREADSHEET_ID', 'your_default_spreadsheet_id')
+        print(f"Using spreadsheet ID: {spreadsheet_id}")
         
         # Initialize client
         client = GoogleSheetsClient(
@@ -41,6 +48,8 @@ def main():
             
     except Exception as e:
         print(f"Error starting service: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 if __name__ == "__main__":
