@@ -1,0 +1,29 @@
+Column A: Y - This is the year of the order date
+Column B: M - This is the month of the order date
+Column C: Order Date
+Column D: Name - [Name of the customer]
+Column E: Sold By - [Dropdown field; choose between 'Ferdie' or 'Nina']. If customer chooses Quezon City pick-up point, we select Ferdie since Ferdie lives there. If customer selects Paranaque pick-up point, we select Nina.
+Column F: Social - [Deprecated column; sheet is hidden — leave blank]
+Column G: Payment - This is the payment mode and is a dropdown list. Customers usually use Gcash, BPI, and Cash
+Column H: Status Payment - This is either Paid or Unpaid
+Column I: Status (Delivery) - This is the delivery status
+Column J: Notes - 
+Column K: Note -
+Column L: Summary Order - [Auto-generated summary based on columns N–Q and U–X]. This is the total order breakdown.
+Column M: (Blank) - [Unused column — leave blank]
+Column N: P-CHZ - [Number of Cheese pouches ordered]
+Column O: P-SC - [Number of Sour Cream pouches ordered]
+Column P: P-BBQ - [Number of BBQ pouches ordered]
+Column Q: P-OG - [Number of Original pouches ordered]
+Column R: T - [Leave blank]
+Column S: (Blank) - [Unused column — leave blank]
+Column T: 2L-CHZ - [Number of Cheese tubs ordered]
+Column U: 2L-SC - [Number of Sour Cream tubs ordered]
+Column V: 2L-BBQ - [Number of BBQ tubs ordered]
+Column W: 2L-OG - [Number of Original tubs ordered]
+Column X: (Blank) - [Unused column — leave blank]
+Column Y: T - [Leave blank]
+Column Z: SF - [Shipping fee]
+Column AA: Disc - [Discount given]
+Column AB: Price - [Auto-calculated using Excel formula; leave blank]
+Column AC: Note - [Unused — leave blank]
