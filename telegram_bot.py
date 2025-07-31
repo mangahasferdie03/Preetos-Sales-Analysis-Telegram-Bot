@@ -774,23 +774,30 @@ Undelivered ({len(undelivered_orders)}):
             print(f"Error starting bot: {e}")
 
 def main():
-    # Read configuration from secret key file
+    # Read configuration from environment variables or secret key file
     try:
-        with open('secret key.txt', 'r') as f:
-            lines = f.readlines()
-            telegram_token = None
-            anthropic_key = None
-            
-            for line in lines:
-                if 'telegram bot:' in line.lower():
-                    telegram_token = line.split(':', 1)[1].strip()
-                elif 'anthropic key:' in line.lower():
-                    anthropic_key = line.split(':', 1)[1].strip()
+        # Try environment variables first (for Railway)
+        telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        
+        # Fall back to secret key file (for local development)
+        if not telegram_token or not anthropic_key:
+            try:
+                with open('secret key.txt', 'r') as f:
+                    lines = f.readlines()
+                    
+                    for line in lines:
+                        if 'telegram bot:' in line.lower() and not telegram_token:
+                            telegram_token = line.split(':', 1)[1].strip()
+                        elif 'anthropic key:' in line.lower() and not anthropic_key:
+                            anthropic_key = line.split(':', 1)[1].strip()
+            except FileNotFoundError:
+                pass  # File doesn't exist in production
         
         if not telegram_token:
-            raise ValueError("Telegram bot token not found in secret key.txt")
+            raise ValueError("Telegram bot token not found in environment variables or secret key.txt")
         if not anthropic_key:
-            raise ValueError("Anthropic API key not found in secret key.txt")
+            raise ValueError("Anthropic API key not found in environment variables or secret key.txt")
         
         # Set up configuration
         credentials_file = 'credentials.json'
