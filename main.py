@@ -1,41 +1,53 @@
 import os
 import json
-from google_sheets_client import GoogleSheetsClient
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 def main():
     """Main entry point for the Railway deployment."""
     print("Starting Google Sheets API service...")
     
-    # Initialize the Google Sheets client
     try:
-        # Check if we have credentials in environment variable
+        # Get credentials from environment variable
         credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
-        if credentials_json:
-            print("Using credentials from environment variable")
-            # Parse the JSON string and write it properly formatted
-            try:
-                creds_data = json.loads(credentials_json)
-                with open('temp_credentials.json', 'w') as f:
-                    json.dump(creds_data, f, indent=2)
-                credentials_file = 'temp_credentials.json'
-                print("Credentials file created successfully")
-            except json.JSONDecodeError as e:
-                print(f"Error parsing credentials JSON: {e}")
-                raise
-        else:
-            credentials_file = 'credentials.json'
-            print("Using credentials from file")
-        
-        # Get spreadsheet ID from environment or use a default
         spreadsheet_id = os.getenv('SPREADSHEET_ID', 'your_default_spreadsheet_id')
-        print(f"Using spreadsheet ID: {spreadsheet_id}")
         
-        # Initialize client
-        client = GoogleSheetsClient(
-            credentials_file=credentials_file,
-            spreadsheet_id=spreadsheet_id
+        if not credentials_json:
+            raise ValueError("GOOGLE_CREDENTIALS_JSON environment variable is required")
+        
+        print("Creating credentials from environment variable...")
+        
+        # Create credentials directly from environment variable
+        # Parse the JSON string with proper error handling
+        try:
+            # Handle potential escaping issues
+            if credentials_json.startswith('"') and credentials_json.endswith('"'):
+                credentials_json = credentials_json[1:-1]  # Remove outer quotes
+            
+            # Replace escaped quotes
+            credentials_json = credentials_json.replace('\\"', '"')
+            
+            creds_data = json.loads(credentials_json)
+            print("JSON parsed successfully")
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
+            print(f"First 100 chars of credentials: {credentials_json[:100]}")
+            raise
+        
+        # Create credentials object directly
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = service_account.Credentials.from_service_account_info(
+            creds_data, scopes=scopes
         )
-        print("Google Sheets client initialized successfully")
+        
+        # Build the service
+        service = build('sheets', 'v4', credentials=creds)
+        print("Google Sheets service created successfully")
+        
+        # Test connection
+        print(f"Testing connection to spreadsheet: {spreadsheet_id}")
+        sheet = service.spreadsheets()
         
         # Basic health check - you can customize this
         print("Service is running and ready to handle requests")
