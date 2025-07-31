@@ -24,11 +24,72 @@ class TelegramGoogleSheetsBot:
         
         # Initialize Google Sheets client
         try:
-            self.sheets_client = GoogleSheetsClient(
-                credentials_file=credentials_file,
-                spreadsheet_id=spreadsheet_id
-            )
-            logger.info("Google Sheets client initialized successfully")
+            # Check if we're on Railway (env vars) or local (file)
+            if os.getenv('GOOGLE_PRIVATE_KEY'):
+                # Railway environment - create credentials from env vars
+                from google.oauth2 import service_account
+                import json
+                
+                creds_data = {
+                    "type": "service_account",
+                    "project_id": "preetos-order-agent",
+                    "private_key_id": "52ef2c399f9d49f7b6af42f061b10706419aeb89",
+                    "private_key": os.getenv('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+                    "client_email": "preeetos-sheets-agent@preetos-order-agent.iam.gserviceaccount.com",
+                    "client_id": "114633176250172838577",
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/preeetos-sheets-agent%40preetos-order-agent.iam.gserviceaccount.com",
+                    "universe_domain": "googleapis.com"
+                }
+                
+                creds = service_account.Credentials.from_service_account_info(
+                    creds_data, scopes=['https://www.googleapis.com/auth/spreadsheets']
+                )
+                
+                # Create service directly
+                from googleapiclient.discovery import build
+                service = build('sheets', 'v4', credentials=creds)
+                
+                # Create a simple sheets client wrapper
+                class SimpleGoogleSheetsClient:
+                    def __init__(self, service, spreadsheet_id):
+                        self.service = service
+                        self.spreadsheet_id = spreadsheet_id
+                    
+                    def read_sheet(self, sheet_name, range_name=None):
+                        try:
+                            if range_name:
+                                range_str = f"{sheet_name}!{range_name}"
+                            else:
+                                range_str = sheet_name
+                            
+                            result = self.service.spreadsheets().values().get(
+                                spreadsheetId=self.spreadsheet_id, range=range_str
+                            ).execute()
+                            
+                            values = result.get('values', [])
+                            if not values:
+                                return {'headers': [], 'data': []}
+                            
+                            headers = values[0] if values else []
+                            data = values[1:] if len(values) > 1 else []
+                            
+                            return {'headers': headers, 'data': data}
+                        except Exception as e:
+                            logger.error(f"Error reading sheet: {e}")
+                            return {'headers': [], 'data': []}
+                
+                self.sheets_client = SimpleGoogleSheetsClient(service, spreadsheet_id)
+                logger.info("Google Sheets client initialized successfully (Railway)")
+            else:
+                # Local environment - use file
+                self.sheets_client = GoogleSheetsClient(
+                    credentials_file=credentials_file,
+                    spreadsheet_id=spreadsheet_id
+                )
+                logger.info("Google Sheets client initialized successfully (Local)")
         except Exception as e:
             logger.error(f"Failed to initialize Google Sheets client: {e}")
         
