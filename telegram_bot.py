@@ -100,9 +100,13 @@ class TelegramGoogleSheetsBot:
         try:
             if not anthropic_key:
                 raise ValueError("Anthropic API key is missing")
+            
+            # Debug API key format (show first/last few chars only)
+            key_preview = f"{anthropic_key[:8]}...{anthropic_key[-8:]}" if len(anthropic_key) > 16 else "too short"
+            logger.info(f"Anthropic API key format: {key_preview}")
+            
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_key)
             logger.info("Anthropic client initialized successfully")
-            print("Anthropic client initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Anthropic client: {e}")
             print(f"Anthropic init error: {e}")  # Also print to console
@@ -235,15 +239,18 @@ Available commands:
         try:
             await update.message.reply_text("📊 Analyzing today's sales data...")
             
-            # Get today's date in multiple formats for debugging
-            now = datetime.now()
+            # Get today's date in Philippine timezone
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
+            
             today_formats = [
-                now.strftime('%B %d, %Y'),  # July 31, 2025 (matches your sheet format!)
-                now.strftime('%m/%d/%Y'),  # 07/31/2025
-                f"{now.month}/{now.day}/{now.year}",  # 7/31/2025
-                now.strftime('%Y-%m-%d'),   # 2025-07-31
-                now.strftime('%d/%m/%Y'),   # 31/07/2025
-                f"{now.day}/{now.month}/{now.year}",  # 31/7/2025
+                now.strftime('%B %d, %Y'),  # August 01, 2025 (matches your sheet format!)
+                now.strftime('%m/%d/%Y'),  # 08/01/2025
+                f"{now.month}/{now.day}/{now.year}",  # 8/1/2025
+                now.strftime('%Y-%m-%d'),   # 2025-08-01
+                now.strftime('%d/%m/%Y'),   # 01/08/2025
+                f"{now.day}/{now.month}/{now.year}",  # 1/8/2025
             ]
             
             # Primary format for comparison
@@ -538,8 +545,10 @@ Undelivered ({len(undelivered_orders)}):
         try:
             await update.message.reply_text("📊 Analyzing this week's sales data...")
             
-            # Get this week's date range (Sunday to Saturday)
-            now = datetime.now()
+            # Get this week's date range (Sunday to Saturday) in Philippine timezone
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
             # Get Sunday of this week (Sunday = 6 in weekday(), so we need to adjust)
             days_since_sunday = (now.weekday() + 1) % 7  # Convert Monday=0 to Sunday=0
             sunday = now - timedelta(days=days_since_sunday)
