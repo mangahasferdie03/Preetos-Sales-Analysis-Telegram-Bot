@@ -92,13 +92,18 @@ class TelegramGoogleSheetsBot:
                 logger.info("Google Sheets client initialized successfully (Local)")
         except Exception as e:
             logger.error(f"Failed to initialize Google Sheets client: {e}")
+            print(f"Google Sheets init error: {e}")  # Also print to console
         
         # Initialize Anthropic client
         try:
+            if not anthropic_key:
+                raise ValueError("Anthropic API key is missing")
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_key)
             logger.info("Anthropic client initialized successfully")
+            print("Anthropic client initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Anthropic client: {e}")
+            print(f"Anthropic init error: {e}")  # Also print to console
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /start command"""
@@ -219,7 +224,10 @@ Available commands:
     async def sales_today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get today's sales analysis with AI insights"""
         if not self.sheets_client or not self.anthropic_client:
-            await update.message.reply_text("❌ Services not available")
+            # Debug which service is missing
+            sheets_status = "✅" if self.sheets_client else "❌"
+            anthropic_status = "✅" if self.anthropic_client else "❌"
+            await update.message.reply_text(f"❌ Services not available\nSheets: {sheets_status} | Anthropic: {anthropic_status}")
             return
         
         try:
@@ -859,6 +867,13 @@ def main():
             raise ValueError("Telegram bot token not found in environment variables or secret key.txt")
         if not anthropic_key:
             raise ValueError("Anthropic API key not found in environment variables or secret key.txt")
+        
+        # Debug environment variables (without showing full values)
+        print(f"Environment check:")
+        print(f"TELEGRAM_BOT_TOKEN: {'✅' if telegram_token else '❌'}")
+        print(f"ANTHROPIC_API_KEY: {'✅' if anthropic_key else '❌'}")
+        print(f"GOOGLE_PRIVATE_KEY: {'✅' if os.getenv('GOOGLE_PRIVATE_KEY') else '❌'}")
+        print(f"SPREADSHEET_ID: {os.getenv('SPREADSHEET_ID', 'using default')}")
         
         # Set up configuration
         credentials_file = 'credentials.json'
