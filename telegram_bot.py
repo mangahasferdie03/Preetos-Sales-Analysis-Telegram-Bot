@@ -30,19 +30,46 @@ class TelegramGoogleSheetsBot:
                 from google.oauth2 import service_account
                 import json
                 
+                # Handle private key format
+                raw_private_key = os.getenv('GOOGLE_PRIVATE_KEY')
+                print(f"Raw private key length: {len(raw_private_key) if raw_private_key else 0}")
+                
+                # Try different newline replacements
+                private_key_attempts = [
+                    raw_private_key.replace('\\n', '\n'),  # Replace literal \n with actual newlines
+                    raw_private_key.replace('\\\\n', '\n'),  # Replace escaped \\n
+                    raw_private_key,  # Use as-is
+                ]
+                
                 creds_data = {
                     "type": "service_account",
                     "project_id": "preetos-order-agent",
                     "private_key_id": "52ef2c399f9d49f7b6af42f061b10706419aeb89",
-                    "private_key": os.getenv('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+                    "private_key": "",  # Will be set below
                     "client_email": "preeetos-sheets-agent@preetos-order-agent.iam.gserviceaccount.com",
                     "client_id": "114633176250172838577",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", 
                     "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/preeetos-sheets-agent%40preetos-order-agent.iam.gserviceaccount.com",
                     "universe_domain": "googleapis.com"
                 }
+                
+                # Try each private key format until one works
+                for i, key_attempt in enumerate(private_key_attempts):
+                    print(f"Trying private key format {i+1}...")
+                    creds_data["private_key"] = key_attempt
+                    try:
+                        # Test if this format works
+                        test_creds = service_account.Credentials.from_service_account_info(
+                            creds_data, scopes=['https://www.googleapis.com/auth/spreadsheets']
+                        )
+                        print(f"Private key format {i+1} worked!")
+                        break
+                    except Exception as e:
+                        print(f"Private key format {i+1} failed: {e}")
+                        if i == len(private_key_attempts) - 1:
+                            raise ValueError(f"All private key formats failed. Last error: {e}")
                 
                 creds = service_account.Credentials.from_service_account_info(
                     creds_data, scopes=['https://www.googleapis.com/auth/spreadsheets']
