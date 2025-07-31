@@ -24,8 +24,9 @@ def main():
             if credentials_json.startswith('"') and credentials_json.endswith('"'):
                 credentials_json = credentials_json[1:-1]  # Remove outer quotes
             
-            # Replace escaped quotes
+            # Replace escaped quotes and newlines
             credentials_json = credentials_json.replace('\\"', '"')
+            credentials_json = credentials_json.replace('\\n', '\n')
             
             creds_data = json.loads(credentials_json)
             print("JSON parsed successfully")
