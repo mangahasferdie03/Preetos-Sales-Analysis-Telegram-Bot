@@ -476,7 +476,7 @@ Undelivered ({len(undelivered_orders)}):
                     max_tokens=200,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of today's sales performance. Keep it concise and friendly - no recommendations needed:\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of today's sales performance. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled):\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
@@ -643,9 +643,10 @@ Undelivered ({len(undelivered_orders)}):
                     customers.add(customer_name)
                     
                     # Revenue (handle missing price gracefully)
+                    order_price = 0
                     try:
-                        if price_col < len(row) and row[price_col]:
-                            price_value = row[price_col]
+                        price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                        if price_value:
                             # Extract numeric value, removing currency symbols and commas
                             import re
                             price_str = str(price_value)
@@ -654,8 +655,8 @@ Undelivered ({len(undelivered_orders)}):
                             if numeric_parts:
                                 # Take the first numeric part and clean it
                                 clean_price = numeric_parts[0].replace(',', '')
-                                price = float(clean_price)
-                                total_revenue += price
+                                order_price = float(clean_price)
+                                total_revenue += order_price
                     except (ValueError, IndexError, AttributeError):
                         # Price not available or invalid, count as 0
                         pass
@@ -753,7 +754,7 @@ Undelivered ({len(undelivered_orders)}): {undelivered_formatted}
                     max_tokens=200,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of this week's sales performance. Keep it concise and friendly - no recommendations needed:\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of this week's sales performance. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled):\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
