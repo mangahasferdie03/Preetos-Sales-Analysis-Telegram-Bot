@@ -297,6 +297,8 @@ Available commands:
             customers = set()
             pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
             tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
             paid_customers = []
             unpaid_customers = []
             undelivered_orders = []
@@ -388,6 +390,23 @@ Available commands:
                     if 'Paid' in payment_status:
                         paid_customers.append(customer_name)
                         paid_revenue += order_price
+                        
+                        # Track products for paid customers only
+                        try:
+                            paid_pouches['Cheese'] += int(row[p_chz_col]) if p_chz_col < len(row) and str(row[p_chz_col]).strip().isdigit() else 0
+                            paid_pouches['Sour Cream'] += int(row[p_sc_col]) if p_sc_col < len(row) and str(row[p_sc_col]).strip().isdigit() else 0
+                            paid_pouches['BBQ'] += int(row[p_bbq_col]) if p_bbq_col < len(row) and str(row[p_bbq_col]).strip().isdigit() else 0
+                            paid_pouches['Original'] += int(row[p_og_col]) if p_og_col < len(row) and str(row[p_og_col]).strip().isdigit() else 0
+                        except (ValueError, IndexError):
+                            pass
+                        
+                        try:
+                            paid_tubs['Cheese'] += int(row[t_chz_col]) if t_chz_col < len(row) and str(row[t_chz_col]).strip().isdigit() else 0
+                            paid_tubs['Sour Cream'] += int(row[t_sc_col]) if t_sc_col < len(row) and str(row[t_sc_col]).strip().isdigit() else 0
+                            paid_tubs['BBQ'] += int(row[t_bbq_col]) if t_bbq_col < len(row) and str(row[t_bbq_col]).strip().isdigit() else 0
+                            paid_tubs['Original'] += int(row[t_og_col]) if t_og_col < len(row) and str(row[t_og_col]).strip().isdigit() else 0
+                        except (ValueError, IndexError):
+                            pass
                     else:
                         unpaid_customers.append(customer_name)
                         unpaid_revenue += order_price
@@ -420,6 +439,8 @@ Available commands:
             # Calculate totals
             total_pouches = sum(pouches.values())
             total_tubs = sum(tubs.values())
+            total_paid_pouches = sum(paid_pouches.values())
+            total_paid_tubs = sum(paid_tubs.values())
             
             # Format customer names with numbers and payment status
             if customers:
@@ -459,10 +480,10 @@ Available commands:
 {customer_list}
 
 ✏️ Order:
-Pouches ({total_pouches})
-Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
-Tubs ({total_tubs})
-Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -493,10 +514,10 @@ Undelivered ({len(undelivered_orders)}):
 {customer_list}
 
 ✏️ Order:
-Pouches ({total_pouches})
-Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
-Tubs ({total_tubs})
-Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -515,10 +536,10 @@ Undelivered ({len(undelivered_orders)}):
 {customer_list}
 
 ✏️ Order:
-Pouches ({total_pouches})
-Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
-Tubs ({total_tubs})
-Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -600,6 +621,8 @@ Undelivered ({len(undelivered_orders)}):
             customers = set()
             pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
             tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
             paid_customers = []
             unpaid_customers = []
             undelivered_orders = []
@@ -684,6 +707,23 @@ Undelivered ({len(undelivered_orders)}):
                     if 'Paid' in payment_status:
                         paid_customers.append(customer_name)
                         paid_revenue += order_price
+                        
+                        # Track products for paid customers only
+                        try:
+                            paid_pouches['Cheese'] += int(row[p_chz_col]) if p_chz_col < len(row) and str(row[p_chz_col]).strip().isdigit() else 0
+                            paid_pouches['Sour Cream'] += int(row[p_sc_col]) if p_sc_col < len(row) and str(row[p_sc_col]).strip().isdigit() else 0
+                            paid_pouches['BBQ'] += int(row[p_bbq_col]) if p_bbq_col < len(row) and str(row[p_bbq_col]).strip().isdigit() else 0
+                            paid_pouches['Original'] += int(row[p_og_col]) if p_og_col < len(row) and str(row[p_og_col]).strip().isdigit() else 0
+                        except (ValueError, IndexError):
+                            pass
+                        
+                        try:
+                            paid_tubs['Cheese'] += int(row[t_chz_col]) if t_chz_col < len(row) and str(row[t_chz_col]).strip().isdigit() else 0
+                            paid_tubs['Sour Cream'] += int(row[t_sc_col]) if t_sc_col < len(row) and str(row[t_sc_col]).strip().isdigit() else 0
+                            paid_tubs['BBQ'] += int(row[t_bbq_col]) if t_bbq_col < len(row) and str(row[t_bbq_col]).strip().isdigit() else 0
+                            paid_tubs['Original'] += int(row[t_og_col]) if t_og_col < len(row) and str(row[t_og_col]).strip().isdigit() else 0
+                        except (ValueError, IndexError):
+                            pass
                     else:
                         unpaid_customers.append(customer_name)
                         unpaid_revenue += order_price
@@ -696,6 +736,8 @@ Undelivered ({len(undelivered_orders)}):
             # Calculate totals
             total_pouches = sum(pouches.values())
             total_tubs = sum(tubs.values())
+            total_paid_pouches = sum(paid_pouches.values())
+            total_paid_tubs = sum(paid_tubs.values())
             
             # Format customer names with numbers and payment status
             if customers:
@@ -771,10 +813,10 @@ Undelivered ({len(undelivered_orders)}): {undelivered_formatted}
 {customer_list}
 
 ✏️ Order:
-Pouches ({total_pouches})
-Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
-Tubs ({total_tubs})
-Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -793,10 +835,10 @@ Undelivered ({len(undelivered_orders)}):
 {customer_list}
 
 ✏️ Order:
-Pouches ({total_pouches})
-Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
-Tubs ({total_tubs})
-Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
