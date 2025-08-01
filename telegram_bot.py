@@ -300,6 +300,8 @@ Available commands:
             paid_customers = []
             unpaid_customers = []
             undelivered_orders = []
+            paid_revenue = 0
+            unpaid_revenue = 0
             
             # DEBUG: Track date matching
             debug_matches = []
@@ -345,6 +347,7 @@ Available commands:
                     customers.add(customer_name)
                     
                     # Revenue (handle missing price gracefully)
+                    order_price = 0
                     try:
                         price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
                         if price_value:
@@ -356,8 +359,8 @@ Available commands:
                             if numeric_parts:
                                 # Take the first numeric part and clean it
                                 clean_price = numeric_parts[0].replace(',', '')
-                                price = float(clean_price)
-                                total_revenue += price
+                                order_price = float(clean_price)
+                                total_revenue += order_price
                     except (ValueError, IndexError, AttributeError):
                         # Price not available or invalid, count as 0
                         pass
@@ -384,8 +387,10 @@ Available commands:
                     payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
                     if 'Paid' in payment_status:
                         paid_customers.append(customer_name)
+                        paid_revenue += order_price
                     else:
                         unpaid_customers.append(customer_name)
+                        unpaid_revenue += order_price
                     
                     # Delivery status (only "Delivered" counts as delivered, everything else is undelivered)
                     delivery_status = str(row[delivery_status_col]).strip() if delivery_status_col < len(row) and row[delivery_status_col] else 'Pending'
@@ -416,8 +421,18 @@ Available commands:
             total_pouches = sum(pouches.values())
             total_tubs = sum(tubs.values())
             
-            # Format customer names with numbers
-            customer_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(sorted(customers))]) if customers else "None"
+            # Format customer names with numbers and payment status
+            if customers:
+                sorted_customers = sorted(customers)
+                customer_list_items = []
+                for i, name in enumerate(sorted_customers):
+                    if name in unpaid_customers:
+                        customer_list_items.append(f"{i+1}. {name} ❌")
+                    else:
+                        customer_list_items.append(f"{i+1}. {name}")
+                customer_list = "\n".join(customer_list_items)
+            else:
+                customer_list = "None"
             
             # Format names with vertical enumeration
             def format_numbered_names(names):
@@ -440,7 +455,7 @@ Available commands:
             # Get AI insights
             structured_summary = f"""📊 Sales Report for {date_formatted}
 
-💰 Revenue: ₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
 {customer_list}
 
 ✏️ Order:
@@ -448,12 +463,6 @@ Pouches ({total_pouches})
 Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
 Tubs ({total_tubs})
 Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
-
-💳 Payment:
-Paid ({len(paid_customers)}):
-{paid_formatted}
-Unpaid ({len(unpaid_customers)}):
-{unpaid_formatted}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -480,7 +489,7 @@ Undelivered ({len(undelivered_orders)}):
 🎇 Claude Insights:
 {ai_insights}
 
-💰 Revenue: ₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
 {customer_list}
 
 ✏️ Order:
@@ -488,12 +497,6 @@ Pouches ({total_pouches})
 Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
 Tubs ({total_tubs})
 Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
-
-💳 Payment:
-Paid ({len(paid_customers)}):
-{paid_formatted}
-Unpaid ({len(unpaid_customers)}):
-{unpaid_formatted}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -508,7 +511,7 @@ Undelivered ({len(undelivered_orders)}):
 🎇 Claude Insights:
 {ai_insights}"""
                 
-                details = f"""💰 Revenue: ₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+                details = f"""💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
 {customer_list}
 
 ✏️ Order:
@@ -516,12 +519,6 @@ Pouches ({total_pouches})
 Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
 Tubs ({total_tubs})
 Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
-
-💳 Payment:
-Paid ({len(paid_customers)}):
-{paid_formatted}
-Unpaid ({len(unpaid_customers)}):
-{unpaid_formatted}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -606,6 +603,8 @@ Undelivered ({len(undelivered_orders)}):
             paid_customers = []
             unpaid_customers = []
             undelivered_orders = []
+            paid_revenue = 0
+            unpaid_revenue = 0
             
             for row in rows:
                 # Check if this is a valid order: Column C (date), D (name), or L (summary) has value
@@ -683,8 +682,10 @@ Undelivered ({len(undelivered_orders)}):
                     payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
                     if 'Paid' in payment_status:
                         paid_customers.append(customer_name)
+                        paid_revenue += order_price
                     else:
                         unpaid_customers.append(customer_name)
+                        unpaid_revenue += order_price
                     
                     # Delivery status (only "Delivered" counts as delivered, everything else is undelivered)
                     delivery_status = str(row[delivery_status_col]).strip() if delivery_status_col < len(row) and row[delivery_status_col] else 'Pending'
@@ -695,8 +696,18 @@ Undelivered ({len(undelivered_orders)}):
             total_pouches = sum(pouches.values())
             total_tubs = sum(tubs.values())
             
-            # Format customer names with numbers
-            customer_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(sorted(customers))]) if customers else "None"
+            # Format customer names with numbers and payment status
+            if customers:
+                sorted_customers = sorted(customers)
+                customer_list_items = []
+                for i, name in enumerate(sorted_customers):
+                    if name in unpaid_customers:
+                        customer_list_items.append(f"{i+1}. {name} ❌")
+                    else:
+                        customer_list_items.append(f"{i+1}. {name}")
+                customer_list = "\n".join(customer_list_items)
+            else:
+                customer_list = "None"
             
             # Format names with vertical enumeration
             def format_numbered_names(names):
@@ -755,7 +766,7 @@ Undelivered ({len(undelivered_orders)}): {undelivered_formatted}
 🎇 Claude Insights:
 {ai_insights}
 
-💰 Revenue: ₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
 {customer_list}
 
 ✏️ Order:
@@ -763,12 +774,6 @@ Pouches ({total_pouches})
 Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
 Tubs ({total_tubs})
 Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
-
-💳 Payment:
-Paid ({len(paid_customers)}):
-{paid_formatted}
-Unpaid ({len(unpaid_customers)}):
-{unpaid_formatted}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
@@ -783,7 +788,7 @@ Undelivered ({len(undelivered_orders)}):
 🎇 Claude Insights:
 {ai_insights}"""
                 
-                details = f"""💰 Revenue: ₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+                details = f"""💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
 {customer_list}
 
 ✏️ Order:
@@ -791,12 +796,6 @@ Pouches ({total_pouches})
 Cheese {pouches['Cheese']} | Sour Cream {pouches['Sour Cream']} | BBQ {pouches['BBQ']} | Original {pouches['Original']}
 Tubs ({total_tubs})
 Cheese {tubs['Cheese']} | Sour Cream {tubs['Sour Cream']} | BBQ {tubs['BBQ']} | Original {tubs['Original']}
-
-💳 Payment:
-Paid ({len(paid_customers)}):
-{paid_formatted}
-Unpaid ({len(unpaid_customers)}):
-{unpaid_formatted}
 
 🚚 Delivery:
 Undelivered ({len(undelivered_orders)}):
