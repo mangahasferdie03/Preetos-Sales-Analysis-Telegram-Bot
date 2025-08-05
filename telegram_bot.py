@@ -251,8 +251,6 @@ Available commands:
                 now.strftime('%m/%d/%Y'),  # 08/01/2025
                 f"{now.month}/{now.day}/{now.year}",  # 8/1/2025
                 now.strftime('%Y-%m-%d'),   # 2025-08-01
-                now.strftime('%d/%m/%Y'),   # 01/08/2025
-                f"{now.day}/{now.month}/{now.year}",  # 1/8/2025
             ]
             
             # Primary format for comparison
@@ -1042,9 +1040,7 @@ Examples:
                         date_obj.strftime('%B %d, %Y'),
                         date_obj.strftime('%m/%d/%Y'),
                         f"{date_obj.month}/{date_obj.day}/{date_obj.year}",
-                        date_obj.strftime('%Y-%m-%d'),
-                        date_obj.strftime('%d/%m/%Y'),
-                        f"{date_obj.day}/{date_obj.month}/{date_obj.year}"
+                        date_obj.strftime('%Y-%m-%d')
                     ]
                     target_dates.extend(date_formats)
                 except Exception as e:
