@@ -710,18 +710,20 @@ Sales Data:
                     max_tokens=800,
                     messages=[{
                         "role": "user",
-                        "content": f"""Analyze today's sales performance and provide insights in this exact format:
+                        "content": f"""Rewrite the following sales analysis in a more casual, conversational tone while keeping it professional and business-oriented. Avoid overly dramatic or alarmist language. Focus on observations, key numbers, and practical next steps in plain English. Use friendly yet clear wording as if explaining it to a small business team. Keep it concise but still structured with a short recommendations section and a short summary. Also mention that unpaid orders may simply mean we haven't updated our tracker yet, or that customers just haven't paid yet.
+
+Format your response exactly like this:
 
 **Recommendations**
-[Single paragraph with detailed prescriptive analysis focusing on sales data and realistic business insights. Use specific numbers from the data as evidence. No actionable steps, just analytical insights about trends, patterns, and business implications.]
+[Write in a casual, friendly tone as if talking to the business owner. Focus on what the numbers tell us and what patterns we're seeing. Use specific data from today's sales. Keep it conversational but insightful - no dramatic language, just straightforward observations.]
 
-**Summary**  
-[Single paragraph conversational summary of today's performance covering revenue, unpaid customers, order counts, and delivery status. Keep it friendly and informative.]
+**Summary**
+[Give a friendly, down-to-earth recap of today's performance. Mention the key numbers (revenue, customers, orders) and any notable points about payments or deliveries. Keep it conversational and reassuring where appropriate.]
 
 Context and data:
 {performance_context}
 
-Note: customers marked with ❌ are waiting for payment (not cancelled)."""
+Remember: Unpaid customers (marked ❌) might just mean we haven't updated the tracker yet, or they're still processing payment - not necessarily lost sales."""
                     }]
                 )
                 ai_insights = response.content[0].text
