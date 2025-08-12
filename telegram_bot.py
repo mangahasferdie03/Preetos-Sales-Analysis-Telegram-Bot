@@ -710,14 +710,11 @@ Sales Data:
                     max_tokens=800,
                     messages=[{
                         "role": "user",
-                        "content": f"""Shorten the following sales analysis while keeping the same casual, friendly, and business-oriented tone. Keep all key numbers, trends, and action points. Remove extra words or repetitive phrasings. Keep it structured with a short 'Recommendations' section and a short 'Summary' section. Keep it short to 1 paragraph and around 3 sentences. If there is a lot to unpack, you can do 4 sentences. Also mention that unpaid orders may simply mean we haven't updated our tracker yet, or that customers just haven't paid yet.
+                        "content": f"""Shorten the following sales analysis while keeping the same casual, friendly, and business-oriented tone. Keep all key numbers, trends, and action points. Remove extra words or repetitive phrasings. Keep it structured with just a short 'Summary' section. Keep it short to 1 paragraph and around 3 sentences. If there is a lot to unpack, you can do 4 sentences. Also mention that unpaid orders may simply mean we haven't updated our tracker yet, or that customers just haven't paid yet.
 
 Format your response exactly like this:
 
-Recommendations
-[Write 1 paragraph, around 3 sentences max. Focus on key patterns and actionable insights from today's sales data. Keep it conversational and direct.]
-
-Summary
+Summary:
 [Write 1 paragraph, around 3 sentences max. Give a friendly recap of today's performance with key numbers (revenue, customers, orders). Keep it conversational and reassuring.]
 
 Context and data:
@@ -735,7 +732,7 @@ Remember: Unpaid customers (marked ❌) might just mean we haven't updated the t
 
 🎇 Claude Insights:
 
-Revenue Performance
+Revenue Performance:
 • Today: ₱{paid_revenue:,.0f}
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
@@ -765,7 +762,7 @@ Undelivered ({len(undelivered_orders)}):
 
 🎇 Claude Insights:
 
-Revenue Performance
+Revenue Performance:
 • Today: ₱{paid_revenue:,.0f}
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
