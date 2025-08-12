@@ -1322,6 +1322,29 @@ Undelivered ({len(undelivered_orders)}):
                 "💡 Use /start to see available commands or type 'help' for assistance."
             )
     
+    async def setup_bot_commands(self, application):
+        """Set up the bot command menu"""
+        from telegram import BotCommand
+        
+        commands = [
+            BotCommand("start", "Welcome message and help"),
+            BotCommand("sales_today", "Today's sales analysis with AI"),
+            BotCommand("sales_this_week", "This week's sales analysis with AI"),
+            BotCommand("sales_customdate", "Custom date sales analysis"),
+            BotCommand("orders", "View ORDER sheet data"),
+            BotCommand("inventory", "View INVENTORY sheet data"),
+            BotCommand("expenses", "View EXPENSES sheet data"),
+            BotCommand("sheets", "List available sheets"),
+            BotCommand("read", "Read data from a sheet"),
+            BotCommand("write", "Write data to a sheet"),
+        ]
+        
+        try:
+            await application.bot.set_my_commands(commands)
+            logger.info("Bot commands menu set successfully")
+        except Exception as e:
+            logger.error(f"Error setting bot commands: {e}")
+
     def run(self):
         """Start the bot"""
         try:
@@ -1340,6 +1363,12 @@ Undelivered ({len(undelivered_orders)}):
             application.add_handler(CommandHandler("sales_this_week", self.sales_this_week_command))
             application.add_handler(CommandHandler("sales_customdate", self.sales_customdate_command))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+            
+            # Set up bot commands menu
+            async def post_init(application):
+                await self.setup_bot_commands(application)
+            
+            application.post_init = post_init
             
             logger.info("Bot started successfully")
             print("Telegram bot is running...")
