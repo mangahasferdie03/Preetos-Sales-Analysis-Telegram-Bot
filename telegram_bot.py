@@ -112,122 +112,294 @@ class TelegramGoogleSheetsBot:
             logger.error(f"Failed to initialize Anthropic client: {e}")
             print(f"Anthropic init error: {e}")  # Also print to console
     
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /start command"""
-        welcome_message = """
-Welcome to the Preetos.ai bot!
-
-Available commands:
-/sales_today - Get today's sales analysis with AI 
-/sales_this_week - Get this week's sales analysis with AI 
-/sales_customdate - Get sales analysis for custom date or date range
-        """
-        await update.message.reply_text(welcome_message)
     
-    async def list_sheets_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /sheets command"""
+    def calculate_7_day_average(self):
+        """Calculate 7-day revenue average using same logic as sales_today"""
         if not self.sheets_client:
-            await update.message.reply_text("❌ Google Sheets connection not available")
-            return
+            return 0
         
         try:
-            sheet_info = self.sheets_client.get_sheet_info()
-            if not sheet_info:
-                await update.message.reply_text("❌ No sheets found")
-                return
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
             
-            message = "📊 Available Sheets:\n\n"
-            for sheet in sheet_info:
-                message += f"• {sheet['title']}\n"
+            # Get data from ORDER sheet (same as sales_today)
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0
             
-            await update.message.reply_text(message)
-        except Exception as e:
-            logger.error(f"Error listing sheets: {e}")
-            await update.message.reply_text(f"❌ Error listing sheets: {str(e)}")
-    
-    async def read_sheet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /read command"""
-        if not self.sheets_client:
-            await update.message.reply_text("❌ Google Sheets connection not available")
-            return
-        
-        if not context.args:
-            await update.message.reply_text("❌ Please specify a sheet name. Example: /read ORDER")
-            return
-        
-        sheet_name = ' '.join(context.args)
-        
-        try:
-            data = self.sheets_client.read_sheet(sheet_name=sheet_name)
+            headers = data['headers']
+            rows = data['data']
             
-            if not data.get('headers') and not data.get('data'):
-                await update.message.reply_text(f"❌ No data found in sheet '{sheet_name}'")
-                return
+            # Find column indices (same as sales_today)
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
             
-            # Format response
-            headers = data.get('headers', [])
-            rows = data.get('data', [])
+            total_revenue = 0
+            valid_days = 0
             
-            message = f"📋 Data from '{sheet_name}':\n\n"
-            
-            if headers:
-                message += "Headers: " + " | ".join(headers[:5]) + "\n\n"
-            
-            # Show first 5 rows
-            for i, row in enumerate(rows[:5]):
-                row_data = " | ".join([str(cell) for cell in row[:5]]) if row else "Empty row"
-                message += f"Row {i+1}: {row_data}\n"
-            
-            if len(rows) > 5:
-                message += f"\n... and {len(rows) - 5} more rows"
-            
-            await update.message.reply_text(message)
-            
-        except Exception as e:
-            logger.error(f"Error reading sheet: {e}")
-            await update.message.reply_text(f"❌ Error reading sheet '{sheet_name}': {str(e)}")
-    
-    async def write_sheet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /write command"""
-        if not self.sheets_client:
-            await update.message.reply_text("❌ Google Sheets connection not available")
-            return
-        
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ Please specify sheet name and data. Example: /write ORDER New order data")
-            return
-        
-        sheet_name = context.args[0]
-        data_text = ' '.join(context.args[1:])
-        
-        try:
-            # Append the data as a new row
-            data = [[data_text]]
-            result = self.sheets_client.append_sheet(data, sheet_name=sheet_name)
-            
-            if result:
-                await update.message.reply_text(f"✅ Data added to '{sheet_name}' successfully!")
-            else:
-                await update.message.reply_text(f"❌ Failed to add data to '{sheet_name}'")
+            # Check last 7 days
+            for days_back in range(7):
+                target_date = now - timedelta(days=days_back)
+                target_date_formats = [
+                    target_date.strftime('%B %d, %Y'),  # August 01, 2025
+                    target_date.strftime('%m/%d/%Y'),   # 08/01/2025
+                    f"{target_date.month}/{target_date.day}/{target_date.year}",  # 8/1/2025
+                    target_date.strftime('%Y-%m-%d'),   # 2025-08-01
+                ]
                 
+                day_revenue = 0
+                day_has_orders = False
+                
+                for row in rows:
+                    if len(row) <= 11:
+                        continue
+                    
+                    # Valid order check (same as sales_today)
+                    has_date = len(row) > 2 and str(row[2]).strip()
+                    has_name = len(row) > 3 and str(row[3]).strip()
+                    has_summary = len(row) > 11 and str(row[11]).strip()
+                    
+                    if not (has_date or has_name or has_summary):
+                        continue
+                    
+                    # Check if order is from target date
+                    order_date = row[date_col] if date_col < len(row) else ''
+                    order_date_str = str(order_date).strip()
+                    
+                    is_target_day = False
+                    for date_format in target_date_formats:
+                        if order_date_str == date_format or date_format in order_date_str or order_date_str in date_format:
+                            is_target_day = True
+                            break
+                    
+                    if is_target_day:
+                        day_has_orders = True
+                        
+                        # Check payment status (only paid orders)
+                        payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                        if 'Paid' in payment_status:
+                            # Calculate revenue (same logic as sales_today)
+                            try:
+                                price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                                if price_value:
+                                    import re
+                                    price_str = str(price_value)
+                                    numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                    if numeric_parts:
+                                        clean_price = numeric_parts[0].replace(',', '')
+                                        day_revenue += float(clean_price)
+                            except (ValueError, IndexError, AttributeError):
+                                pass
+                
+                if day_has_orders:
+                    total_revenue += day_revenue
+                    valid_days += 1
+            
+            return total_revenue / valid_days if valid_days > 0 else 0
+            
         except Exception as e:
-            logger.error(f"Error writing to sheet: {e}")
-            await update.message.reply_text(f"❌ Error writing to sheet '{sheet_name}': {str(e)}")
+            logger.error(f"Error calculating 7-day average: {e}")
+            return 0
     
-    async def orders_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Quick access to ORDER sheet"""
-        context.args = ['ORDER']
-        await self.read_sheet_command(update, context)
+    def calculate_30_day_average(self):
+        """Calculate 30-day revenue average using same logic as sales_today"""
+        if not self.sheets_client:
+            return 0
+        
+        try:
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
+            
+            # Get data from ORDER sheet (same as sales_today)
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0
+            
+            headers = data['headers']
+            rows = data['data']
+            
+            # Find column indices (same as sales_today)
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+            
+            total_revenue = 0
+            valid_days = 0
+            
+            # Check last 30 days
+            for days_back in range(30):
+                target_date = now - timedelta(days=days_back)
+                target_date_formats = [
+                    target_date.strftime('%B %d, %Y'),  # August 01, 2025
+                    target_date.strftime('%m/%d/%Y'),   # 08/01/2025
+                    f"{target_date.month}/{target_date.day}/{target_date.year}",  # 8/1/2025
+                    target_date.strftime('%Y-%m-%d'),   # 2025-08-01
+                ]
+                
+                day_revenue = 0
+                day_has_orders = False
+                
+                for row in rows:
+                    if len(row) <= 11:
+                        continue
+                    
+                    # Valid order check (same as sales_today)
+                    has_date = len(row) > 2 and str(row[2]).strip()
+                    has_name = len(row) > 3 and str(row[3]).strip()
+                    has_summary = len(row) > 11 and str(row[11]).strip()
+                    
+                    if not (has_date or has_name or has_summary):
+                        continue
+                    
+                    # Check if order is from target date
+                    order_date = row[date_col] if date_col < len(row) else ''
+                    order_date_str = str(order_date).strip()
+                    
+                    is_target_day = False
+                    for date_format in target_date_formats:
+                        if order_date_str == date_format or date_format in order_date_str or order_date_str in date_format:
+                            is_target_day = True
+                            break
+                    
+                    if is_target_day:
+                        day_has_orders = True
+                        
+                        # Check payment status (only paid orders)
+                        payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                        if 'Paid' in payment_status:
+                            # Calculate revenue (same logic as sales_today)
+                            try:
+                                price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                                if price_value:
+                                    import re
+                                    price_str = str(price_value)
+                                    numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                    if numeric_parts:
+                                        clean_price = numeric_parts[0].replace(',', '')
+                                        day_revenue += float(clean_price)
+                            except (ValueError, IndexError, AttributeError):
+                                pass
+                
+                if day_has_orders:
+                    total_revenue += day_revenue
+                    valid_days += 1
+            
+            return total_revenue / valid_days if valid_days > 0 else 0
+            
+        except Exception as e:
+            logger.error(f"Error calculating 30-day average: {e}")
+            return 0
     
-    async def inventory_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Quick access to INVENTORY sheet"""
-        context.args = ['INVENTORY']
-        await self.read_sheet_command(update, context)
-    
-    async def expenses_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Quick access to EXPENSES sheet"""
-        context.args = ['EXPENSES']
-        await self.read_sheet_command(update, context)
+    def calculate_performance_streak(self, today_revenue, seven_day_avg):
+        """Calculate consecutive days above or below 7-day average"""
+        if not self.sheets_client or seven_day_avg == 0:
+            return 0, ""
+        
+        try:
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
+            
+            # Get data from ORDER sheet (same as sales_today)
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0, ""
+            
+            headers = data['headers']
+            rows = data['data']
+            
+            # Find column indices (same as sales_today)
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+            
+            daily_revenues = []
+            
+            # Get daily revenues for last 10 days to calculate streak
+            for days_back in range(10):
+                target_date = now - timedelta(days=days_back)
+                target_date_formats = [
+                    target_date.strftime('%B %d, %Y'),  # August 01, 2025
+                    target_date.strftime('%m/%d/%Y'),   # 08/01/2025
+                    f"{target_date.month}/{target_date.day}/{target_date.year}",  # 8/1/2025
+                    target_date.strftime('%Y-%m-%d'),   # 2025-08-01
+                ]
+                
+                day_revenue = 0
+                day_has_orders = False
+                
+                for row in rows:
+                    if len(row) <= 11:
+                        continue
+                    
+                    # Valid order check (same as sales_today)
+                    has_date = len(row) > 2 and str(row[2]).strip()
+                    has_name = len(row) > 3 and str(row[3]).strip()
+                    has_summary = len(row) > 11 and str(row[11]).strip()
+                    
+                    if not (has_date or has_name or has_summary):
+                        continue
+                    
+                    # Check if order is from target date
+                    order_date = row[date_col] if date_col < len(row) else ''
+                    order_date_str = str(order_date).strip()
+                    
+                    is_target_day = False
+                    for date_format in target_date_formats:
+                        if order_date_str == date_format or date_format in order_date_str or order_date_str in date_format:
+                            is_target_day = True
+                            break
+                    
+                    if is_target_day:
+                        day_has_orders = True
+                        
+                        # Check payment status (only paid orders)
+                        payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                        if 'Paid' in payment_status:
+                            # Calculate revenue (same logic as sales_today)
+                            try:
+                                price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                                if price_value:
+                                    import re
+                                    price_str = str(price_value)
+                                    numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                    if numeric_parts:
+                                        clean_price = numeric_parts[0].replace(',', '')
+                                        day_revenue += float(clean_price)
+                            except (ValueError, IndexError, AttributeError):
+                                pass
+                
+                if day_has_orders:
+                    daily_revenues.append(day_revenue)
+                else:
+                    daily_revenues.append(0)
+            
+            # Calculate streak - check if consecutive days are above or below average
+            streak_count = 0
+            streak_type = ""
+            
+            if daily_revenues:
+                # Determine if today is above or below average
+                is_above_avg = today_revenue > seven_day_avg
+                current_pattern = "above" if is_above_avg else "below"
+                
+                # Count consecutive days with same pattern
+                for daily_rev in daily_revenues:
+                    if (daily_rev > seven_day_avg) == is_above_avg:
+                        streak_count += 1
+                    else:
+                        break
+                
+                streak_type = f"consecutive days {current_pattern} 7-day average"
+            
+            return streak_count, streak_type
+            
+        except Exception as e:
+            logger.error(f"Error calculating performance streak: {e}")
+            return 0, ""
     
     async def sales_today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get today's sales analysis with AI insights"""
@@ -435,6 +607,32 @@ Available commands:
                 }
             }
             
+            # Calculate historical performance metrics
+            seven_day_avg = self.calculate_7_day_average()
+            thirty_day_avg = self.calculate_30_day_average()
+            streak_count, streak_type = self.calculate_performance_streak(paid_revenue, seven_day_avg)
+            
+            # Calculate percentage differences
+            seven_day_diff = ((paid_revenue - seven_day_avg) / seven_day_avg * 100) if seven_day_avg > 0 else 0
+            thirty_day_diff = ((paid_revenue - thirty_day_avg) / thirty_day_avg * 100) if thirty_day_avg > 0 else 0
+            
+            # Analyze product performance vs historical (simplified analysis)
+            total_today_pouches = sum(paid_pouches.values())
+            total_today_tubs = sum(paid_tubs.values())
+            
+            # Create cause analysis based on product performance
+            cause_analysis = []
+            if total_today_pouches > 0:
+                top_pouch = max(paid_pouches, key=paid_pouches.get)
+                if paid_pouches[top_pouch] > 0:
+                    cause_analysis.append(f"{top_pouch} pouches leading ({paid_pouches[top_pouch]} sold)")
+            
+            if total_today_tubs > 0:
+                top_tub = max(paid_tubs, key=paid_tubs.get)
+                if paid_tubs[top_tub] > 0:
+                    cause_analysis.append(f"{top_tub} tubs performing well ({paid_tubs[top_tub]} sold)")
+            
+            cause_text = ", ".join(cause_analysis) if cause_analysis else "Mixed product performance"
             
             # Calculate totals
             total_pouches = sum(pouches.values())
@@ -490,24 +688,58 @@ Undelivered ({len(undelivered_orders)}):
 {undelivered_formatted}
             """
             
-            # Get AI insights
+            # Get AI insights with enhanced analysis
             try:
+                # Create comprehensive context for AI analysis
+                performance_context = f"""
+Revenue Performance Analysis for {date_formatted}:
+• Today: ₱{paid_revenue:,.0f}
+• 7-day average: ₱{seven_day_avg:,.0f}
+• 30-day average: ₱{thirty_day_avg:,.0f} 
+• vs 7-day: {seven_day_diff:+.1f}%
+• vs 30-day: {thirty_day_diff:+.1f}%
+• Streak: {streak_count} {streak_type}
+• Main drivers: {cause_text}
+
+Sales Data:
+{structured_summary}
+"""
+                
                 response = self.anthropic_client.messages.create(
                     model="claude-3-5-sonnet-20241022",
-                    max_tokens=200,
+                    max_tokens=800,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of today's sales performance. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled):\n\n{structured_summary}"
+                        "content": f"""Analyze today's sales performance and provide insights in this exact format:
+
+**Recommendations**
+[Single paragraph with detailed prescriptive analysis focusing on sales data and realistic business insights. Use specific numbers from the data as evidence. No actionable steps, just analytical insights about trends, patterns, and business implications.]
+
+**Summary**  
+[Single paragraph conversational summary of today's performance covering revenue, unpaid customers, order counts, and delivery status. Keep it friendly and informative.]
+
+Context and data:
+{performance_context}
+
+Note: customers marked with ❌ are waiting for payment (not cancelled)."""
                     }]
                 )
                 ai_insights = response.content[0].text
             except Exception as e:
                 ai_insights = f"AI analysis unavailable: {str(e)}"
             
-            # Create final message with Claude Insights at the top
-            final_message = f"""📊 Sales Report for {date_formatted if 'date_formatted' in locals() else week_start + ' - ' + week_end}
+            # Create final message with enhanced Claude Insights
+            final_message = f"""📊 Sales Report for {date_formatted}
 
 🎇 Claude Insights:
+
+Revenue Performance
+• Today: ₱{paid_revenue:,.0f}
+• Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
+• Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
+• Streak: {streak_count} {streak_type}
+• Cause: {cause_text}
+
 {ai_insights}
 
 💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
@@ -527,9 +759,17 @@ Undelivered ({len(undelivered_orders)}):
             # Send response
             if len(final_message) > 4000:
                 # Split into header + insights first, then details
-                header_insights = f"""📊 Sales Report for {date_formatted if 'date_formatted' in locals() else week_start + ' - ' + week_end}
+                header_insights = f"""📊 Sales Report for {date_formatted}
 
 🎇 Claude Insights:
+
+Revenue Performance
+• Today: ₱{paid_revenue:,.0f}
+• Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
+• Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
+• Streak: {streak_count} {streak_type}
+• Cause: {cause_text}
+
 {ai_insights}"""
                 
                 details = f"""💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
@@ -1313,30 +1553,18 @@ Undelivered ({len(undelivered_orders)}):
             return
         
         # Simple responses for common queries
-        if "help" in user_message.lower():
-            await self.start_command(update, context)
-        elif "sheet" in user_message.lower():
-            await self.list_sheets_command(update, context)
-        else:
-            await update.message.reply_text(
-                "💡 Use /start to see available commands or type 'help' for assistance."
-            )
+        await update.message.reply_text(
+            "💡 Available commands:\n/sales_today - Today's sales analysis\n/sales_this_week - This week's sales analysis\n/sales_customdate - Custom date sales analysis"
+        )
     
     async def setup_bot_commands(self, application):
         """Set up the bot command menu"""
         from telegram import BotCommand
         
         commands = [
-            BotCommand("start", "Welcome message and help"),
             BotCommand("sales_today", "Today's sales analysis with AI"),
             BotCommand("sales_this_week", "This week's sales analysis with AI"),
             BotCommand("sales_customdate", "Custom date sales analysis"),
-            BotCommand("orders", "View ORDER sheet data"),
-            BotCommand("inventory", "View INVENTORY sheet data"),
-            BotCommand("expenses", "View EXPENSES sheet data"),
-            BotCommand("sheets", "List available sheets"),
-            BotCommand("read", "Read data from a sheet"),
-            BotCommand("write", "Write data to a sheet"),
         ]
         
         try:
@@ -1352,13 +1580,6 @@ Undelivered ({len(undelivered_orders)}):
             application = Application.builder().token(self.telegram_token).build()
             
             # Add handlers
-            application.add_handler(CommandHandler("start", self.start_command))
-            application.add_handler(CommandHandler("sheets", self.list_sheets_command))
-            application.add_handler(CommandHandler("read", self.read_sheet_command))
-            application.add_handler(CommandHandler("write", self.write_sheet_command))
-            application.add_handler(CommandHandler("orders", self.orders_command))
-            application.add_handler(CommandHandler("inventory", self.inventory_command))
-            application.add_handler(CommandHandler("expenses", self.expenses_command))
             application.add_handler(CommandHandler("sales_today", self.sales_today_command))
             application.add_handler(CommandHandler("sales_this_week", self.sales_this_week_command))
             application.add_handler(CommandHandler("sales_customdate", self.sales_customdate_command))
