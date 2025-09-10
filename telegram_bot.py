@@ -470,6 +470,9 @@ class TelegramGoogleSheetsBot:
             philippine_tz = timezone(timedelta(hours=8))
             now = datetime.now(philippine_tz)
             
+            # Debug logging
+            logger.info(f"Contextual performance analysis: period_length = {period_length}, readable_format = {parsed_dates['readable_format']}")
+            
             # Convert date strings to date objects for easier manipulation
             date_objects = []
             for date_str in parsed_dates['dates']:
@@ -590,8 +593,8 @@ class TelegramGoogleSheetsBot:
                     'context': 'two_weeks'
                 }
                 
-            elif 15 <= period_length <= 31:
-                # Monthly comparisons
+            elif 15 <= period_length <= 32:
+                # Monthly comparisons (allow up to 32 days for full months)
                 start_date = date_objects[0]
                 
                 # Previous month (approximate)
@@ -632,10 +635,10 @@ class TelegramGoogleSheetsBot:
                 }
                 
             else:
-                # Long periods - minimal comparison
+                # Long periods (32+ days) - minimal comparison  
                 performance_data = {
                     'context': 'long_period',
-                    'note': 'Limited comparison available for extended periods'
+                    'note': f'Limited comparison available for extended periods ({period_length} days)'
                 }
             
             # Calculate percentage differences
