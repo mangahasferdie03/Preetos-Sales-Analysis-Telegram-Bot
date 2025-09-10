@@ -511,8 +511,8 @@ class TelegramGoogleSheetsBot:
                     'context': 'single_day'
                 }
                 
-            elif 2 <= period_length <= 7:
-                # Short range comparisons
+            elif 2 <= period_length <= 13:
+                # Short range comparisons (2-13 days)
                 start_date = date_objects[0]
                 
                 # Previous same-length period
