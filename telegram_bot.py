@@ -401,6 +401,351 @@ class TelegramGoogleSheetsBot:
             logger.error(f"Error calculating performance streak: {e}")
             return 0, ""
     
+    def calculate_revenue_for_dates(self, target_dates):
+        """Calculate total revenue for specific dates"""
+        if not self.sheets_client:
+            return 0
+        
+        try:
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0
+            
+            headers = data['headers']
+            rows = data['data']
+            
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+            
+            total_revenue = 0
+            
+            for row in rows:
+                if len(row) <= 11:
+                    continue
+                
+                has_date = len(row) > 2 and str(row[2]).strip()
+                has_name = len(row) > 3 and str(row[3]).strip()
+                has_summary = len(row) > 11 and str(row[11]).strip()
+                
+                if not (has_date or has_name or has_summary):
+                    continue
+                
+                order_date = row[date_col] if date_col < len(row) else ''
+                order_date_str = str(order_date).strip()
+                
+                is_target_date = False
+                for target_date in target_dates:
+                    if order_date_str == target_date or target_date in order_date_str or order_date_str in target_date:
+                        is_target_date = True
+                        break
+                
+                if is_target_date:
+                    payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                    if 'Paid' in payment_status:
+                        try:
+                            price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                            if price_value:
+                                import re
+                                price_str = str(price_value)
+                                numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                if numeric_parts:
+                                    clean_price = numeric_parts[0].replace(',', '')
+                                    total_revenue += float(clean_price)
+                        except (ValueError, IndexError, AttributeError):
+                            pass
+            
+            return total_revenue
+            
+        except Exception as e:
+            logger.error(f"Error calculating revenue for dates: {e}")
+            return 0
+    
+    def get_contextual_performance(self, parsed_dates, current_revenue):
+        """Get contextual performance analysis based on date range length"""
+        try:
+            from datetime import datetime, timedelta, timezone
+            
+            period_length = len(parsed_dates['dates'])
+            philippine_tz = timezone(timedelta(hours=8))
+            now = datetime.now(philippine_tz)
+            
+            # Convert date strings to date objects for easier manipulation
+            date_objects = []
+            for date_str in parsed_dates['dates']:
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                date_objects.append(date_obj)
+            
+            performance_data = {}
+            
+            if period_length == 1:
+                # Single day comparisons
+                target_date = date_objects[0]
+                
+                # 7-day average (using existing method)
+                seven_day_avg = self.calculate_7_day_average()
+                
+                # Same day last week
+                last_week_date = target_date - timedelta(days=7)
+                last_week_formats = self.get_date_formats(last_week_date)
+                last_week_revenue = self.calculate_revenue_for_dates(last_week_formats)
+                
+                # Same weekday pattern (last 4 occurrences)
+                weekday_revenues = []
+                for i in range(1, 5):  # Last 4 weeks
+                    past_date = target_date - timedelta(weeks=i)
+                    past_formats = self.get_date_formats(past_date)
+                    revenue = self.calculate_revenue_for_dates(past_formats)
+                    if revenue > 0:
+                        weekday_revenues.append(revenue)
+                
+                weekday_avg = sum(weekday_revenues) / len(weekday_revenues) if weekday_revenues else 0
+                
+                performance_data = {
+                    'seven_day_avg': seven_day_avg,
+                    'last_week_same_day': last_week_revenue,
+                    'weekday_pattern_avg': weekday_avg,
+                    'context': 'single_day'
+                }
+                
+            elif 2 <= period_length <= 7:
+                # Short range comparisons
+                start_date = date_objects[0]
+                
+                # Previous same-length period
+                prev_start = start_date - timedelta(days=period_length)
+                prev_dates = []
+                for i in range(period_length):
+                    prev_date = prev_start + timedelta(days=i)
+                    prev_dates.extend(self.get_date_formats(prev_date))
+                prev_revenue = self.calculate_revenue_for_dates(prev_dates)
+                
+                # 4-week rolling average for same period length
+                rolling_revenues = []
+                for week in range(1, 5):
+                    week_start = start_date - timedelta(weeks=week)
+                    week_dates = []
+                    for i in range(period_length):
+                        week_date = week_start + timedelta(days=i)
+                        week_dates.extend(self.get_date_formats(week_date))
+                    revenue = self.calculate_revenue_for_dates(week_dates)
+                    if revenue > 0:
+                        rolling_revenues.append(revenue)
+                
+                rolling_avg = sum(rolling_revenues) / len(rolling_revenues) if rolling_revenues else 0
+                
+                # Same period last month
+                last_month_start = start_date - timedelta(days=30)
+                last_month_dates = []
+                for i in range(period_length):
+                    last_month_date = last_month_start + timedelta(days=i)
+                    last_month_dates.extend(self.get_date_formats(last_month_date))
+                last_month_revenue = self.calculate_revenue_for_dates(last_month_dates)
+                
+                performance_data = {
+                    'previous_period': prev_revenue,
+                    'rolling_avg': rolling_avg,
+                    'same_period_last_month': last_month_revenue,
+                    'context': 'short_range'
+                }
+                
+            elif period_length == 14:
+                # 2-week comparisons
+                start_date = date_objects[0]
+                
+                # Previous 2 weeks
+                prev_start = start_date - timedelta(days=14)
+                prev_dates = []
+                for i in range(14):
+                    prev_date = prev_start + timedelta(days=i)
+                    prev_dates.extend(self.get_date_formats(prev_date))
+                prev_2week_revenue = self.calculate_revenue_for_dates(prev_dates)
+                
+                # 8-week rolling average (4 two-week periods)
+                rolling_revenues = []
+                for period in range(1, 5):
+                    period_start = start_date - timedelta(weeks=2*period)
+                    period_dates = []
+                    for i in range(14):
+                        period_date = period_start + timedelta(days=i)
+                        period_dates.extend(self.get_date_formats(period_date))
+                    revenue = self.calculate_revenue_for_dates(period_dates)
+                    if revenue > 0:
+                        rolling_revenues.append(revenue)
+                
+                rolling_avg = sum(rolling_revenues) / len(rolling_revenues) if rolling_revenues else 0
+                
+                # Same 2 weeks last month
+                last_month_start = start_date - timedelta(days=30)
+                last_month_dates = []
+                for i in range(14):
+                    last_month_date = last_month_start + timedelta(days=i)
+                    last_month_dates.extend(self.get_date_formats(last_month_date))
+                last_month_revenue = self.calculate_revenue_for_dates(last_month_dates)
+                
+                performance_data = {
+                    'previous_2_weeks': prev_2week_revenue,
+                    'rolling_8week_avg': rolling_avg,
+                    'same_2weeks_last_month': last_month_revenue,
+                    'context': 'two_weeks'
+                }
+                
+            elif 15 <= period_length <= 31:
+                # Monthly comparisons
+                start_date = date_objects[0]
+                
+                # Previous month (approximate)
+                prev_start = start_date - timedelta(days=period_length)
+                prev_dates = []
+                for i in range(period_length):
+                    prev_date = prev_start + timedelta(days=i)
+                    prev_dates.extend(self.get_date_formats(prev_date))
+                prev_month_revenue = self.calculate_revenue_for_dates(prev_dates)
+                
+                # Quarterly average (3 month periods)
+                quarterly_revenues = []
+                for month in range(1, 4):
+                    month_start = start_date - timedelta(days=period_length*month)
+                    month_dates = []
+                    for i in range(period_length):
+                        month_date = month_start + timedelta(days=i)
+                        month_dates.extend(self.get_date_formats(month_date))
+                    revenue = self.calculate_revenue_for_dates(month_dates)
+                    if revenue > 0:
+                        quarterly_revenues.append(revenue)
+                
+                quarterly_avg = sum(quarterly_revenues) / len(quarterly_revenues) if quarterly_revenues else 0
+                
+                # Same month last year (approximate)
+                last_year_start = start_date - timedelta(days=365)
+                last_year_dates = []
+                for i in range(period_length):
+                    last_year_date = last_year_start + timedelta(days=i)
+                    last_year_dates.extend(self.get_date_formats(last_year_date))
+                last_year_revenue = self.calculate_revenue_for_dates(last_year_dates)
+                
+                performance_data = {
+                    'previous_month': prev_month_revenue,
+                    'quarterly_avg': quarterly_avg,
+                    'same_month_last_year': last_year_revenue,
+                    'context': 'monthly'
+                }
+                
+            else:
+                # Long periods - minimal comparison
+                performance_data = {
+                    'context': 'long_period',
+                    'note': 'Limited comparison available for extended periods'
+                }
+            
+            # Calculate percentage differences
+            if current_revenue > 0:
+                for key, value in performance_data.items():
+                    if key != 'context' and key != 'note' and isinstance(value, (int, float)) and value > 0:
+                        diff_key = f"{key}_diff"
+                        performance_data[diff_key] = ((current_revenue - value) / value * 100)
+            
+            return performance_data
+            
+        except Exception as e:
+            logger.error(f"Error in get_contextual_performance: {e}")
+            return {'context': 'error', 'note': f'Error calculating performance: {str(e)}'}
+    
+    def get_date_formats(self, date_obj):
+        """Convert date object to all possible string formats used in the sheet"""
+        return [
+            date_obj.strftime('%B %d, %Y'),  # August 01, 2025
+            date_obj.strftime('%m/%d/%Y'),   # 08/01/2025
+            f"{date_obj.month}/{date_obj.day}/{date_obj.year}",  # 8/1/2025
+            date_obj.strftime('%Y-%m-%d'),   # 2025-08-01
+        ]
+    
+    def format_contextual_performance(self, performance_data, current_revenue):
+        """Format contextual performance data into readable text"""
+        try:
+            context = performance_data.get('context', 'unknown')
+            
+            if context == 'error':
+                return f"⚠️ {performance_data.get('note', 'Performance analysis unavailable')}"
+            
+            elif context == 'long_period':
+                return f"📈 Extended period analysis: ₱{current_revenue:,.0f}\n• {performance_data.get('note', 'Limited comparison data')}"
+            
+            elif context == 'single_day':
+                lines = [f"📈 Single Day Performance: ₱{current_revenue:,.0f}"]
+                
+                if performance_data.get('seven_day_avg', 0) > 0:
+                    diff = performance_data.get('seven_day_avg_diff', 0)
+                    lines.append(f"• Vs 7-day avg: {diff:+.1f}% (₱{performance_data['seven_day_avg']:,.0f} avg)")
+                
+                if performance_data.get('last_week_same_day', 0) > 0:
+                    diff = performance_data.get('last_week_same_day_diff', 0)
+                    lines.append(f"• Vs same day last week: {diff:+.1f}% (₱{performance_data['last_week_same_day']:,.0f})")
+                
+                if performance_data.get('weekday_pattern_avg', 0) > 0:
+                    diff = performance_data.get('weekday_pattern_avg_diff', 0)
+                    lines.append(f"• Vs weekday pattern: {diff:+.1f}% (₱{performance_data['weekday_pattern_avg']:,.0f} avg)")
+                
+                return "\n".join(lines)
+            
+            elif context == 'short_range':
+                lines = [f"📈 Short Range Performance: ₱{current_revenue:,.0f}"]
+                
+                if performance_data.get('previous_period', 0) > 0:
+                    diff = performance_data.get('previous_period_diff', 0)
+                    lines.append(f"• Vs previous period: {diff:+.1f}% (₱{performance_data['previous_period']:,.0f})")
+                
+                if performance_data.get('rolling_avg', 0) > 0:
+                    diff = performance_data.get('rolling_avg_diff', 0)
+                    lines.append(f"• Vs 4-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_avg']:,.0f})")
+                
+                if performance_data.get('same_period_last_month', 0) > 0:
+                    diff = performance_data.get('same_period_last_month_diff', 0)
+                    lines.append(f"• Vs same period last month: {diff:+.1f}% (₱{performance_data['same_period_last_month']:,.0f})")
+                
+                return "\n".join(lines)
+            
+            elif context == 'two_weeks':
+                lines = [f"📈 Two Week Performance: ₱{current_revenue:,.0f}"]
+                
+                if performance_data.get('previous_2_weeks', 0) > 0:
+                    diff = performance_data.get('previous_2_weeks_diff', 0)
+                    lines.append(f"• Vs previous 2 weeks: {diff:+.1f}% (₱{performance_data['previous_2_weeks']:,.0f})")
+                
+                if performance_data.get('rolling_8week_avg', 0) > 0:
+                    diff = performance_data.get('rolling_8week_avg_diff', 0)
+                    lines.append(f"• Vs 8-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_8week_avg']:,.0f})")
+                
+                if performance_data.get('same_2weeks_last_month', 0) > 0:
+                    diff = performance_data.get('same_2weeks_last_month_diff', 0)
+                    lines.append(f"• Vs same 2 weeks last month: {diff:+.1f}% (₱{performance_data['same_2weeks_last_month']:,.0f})")
+                
+                return "\n".join(lines)
+            
+            elif context == 'monthly':
+                lines = [f"📈 Monthly Performance: ₱{current_revenue:,.0f}"]
+                
+                if performance_data.get('previous_month', 0) > 0:
+                    diff = performance_data.get('previous_month_diff', 0)
+                    lines.append(f"• Vs previous month: {diff:+.1f}% (₱{performance_data['previous_month']:,.0f})")
+                
+                if performance_data.get('quarterly_avg', 0) > 0:
+                    diff = performance_data.get('quarterly_avg_diff', 0)
+                    lines.append(f"• Vs quarterly avg: {diff:+.1f}% (₱{performance_data['quarterly_avg']:,.0f})")
+                
+                if performance_data.get('same_month_last_year', 0) > 0:
+                    diff = performance_data.get('same_month_last_year_diff', 0)
+                    lines.append(f"• Vs same month last year: {diff:+.1f}% (₱{performance_data['same_month_last_year']:,.0f})")
+                
+                return "\n".join(lines)
+            
+            else:
+                return f"📈 Performance: ₱{current_revenue:,.0f}\n• Analysis method: {context}"
+                
+        except Exception as e:
+            logger.error(f"Error formatting contextual performance: {e}")
+            return f"📈 Performance: ₱{current_revenue:,.0f}\n• Analysis unavailable due to error"
+    
     async def sales_today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get today's sales analysis with AI insights"""
         if not self.sheets_client or not self.anthropic_client:
@@ -1409,6 +1754,10 @@ Examples:
             
             undelivered_formatted = format_numbered_names(undelivered_orders)
             
+            # Get contextual performance analysis
+            performance_data = self.get_contextual_performance(parsed_dates, paid_revenue)
+            performance_text = self.format_contextual_performance(performance_data, paid_revenue)
+            
             # Get AI insights
             structured_summary = f"""📊 Sales Report for {parsed_dates['readable_format']}
 
@@ -1437,22 +1786,32 @@ Undelivered ({len(undelivered_orders)}):
                 if "week" in parsed_dates['readable_format'].lower() or "range" in str(parsed_dates.get('type', '')):
                     partial_note = " Note: This may be partial data if some dates in the requested period haven't occurred yet."
                 
+                # Include performance context in AI prompt
+                performance_context = f"""
+
+Performance Context:
+{performance_text}
+"""
+                
                 response = self.anthropic_client.messages.create(
                     model="claude-3-5-sonnet-20241022",
-                    max_tokens=200,
+                    max_tokens=300,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled).{partial_note}\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled).{partial_note}{performance_context}\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
             except Exception as e:
                 ai_insights = f"AI analysis unavailable: {str(e)}"
             
-            # Create final message
+            # Create final message with contextual performance
             final_message = f"""📊 Sales Report for {parsed_dates['readable_format']}
 
 🎇 Claude Insights:
+
+{performance_text}
+
 {ai_insights}
 
 💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
@@ -1474,6 +1833,9 @@ Undelivered ({len(undelivered_orders)}):
                 header_insights = f"""📊 Sales Report for {parsed_dates['readable_format']}
 
 🎇 Claude Insights:
+
+{performance_text}
+
 {ai_insights}"""
                 
                 details = f"""💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
