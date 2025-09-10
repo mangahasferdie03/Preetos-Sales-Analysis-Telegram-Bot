@@ -640,7 +640,10 @@ class TelegramGoogleSheetsBot:
             
             # Calculate percentage differences
             if current_revenue > 0:
-                for key, value in performance_data.items():
+                # Create a copy of keys to avoid "dictionary changed size during iteration" error
+                keys_to_process = list(performance_data.keys())
+                for key in keys_to_process:
+                    value = performance_data[key]
                     if key != 'context' and key != 'note' and isinstance(value, (int, float)) and value > 0:
                         diff_key = f"{key}_diff"
                         performance_data[diff_key] = ((current_revenue - value) / value * 100)
