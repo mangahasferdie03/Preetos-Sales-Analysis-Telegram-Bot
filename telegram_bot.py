@@ -2,8 +2,8 @@ import os
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from google_sheets_client import GoogleSheetsClient
 import anthropic
 
@@ -1441,23 +1441,439 @@ Undelivered ({len(undelivered_orders)}):
             await update.message.reply_text(f"❌ Error analyzing weekly sales data: {str(e)}")
     
     async def sales_customdate_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /sales_customdate command - Step 1: Ask for date input"""
-        user_id = update.effective_user.id
+        """Handle the /sales_customdate command - Show quick date buttons or ask for custom input"""
         
-        # Mark this user as awaiting date input
-        self.awaiting_date_input[user_id] = True
+        # Create inline keyboard with quick date options
+        keyboard = [
+            [
+                InlineKeyboardButton("Yesterday", callback_data="date_yesterday"),
+                InlineKeyboardButton("Last 3 Days", callback_data="date_last3days")
+            ],
+            [
+                InlineKeyboardButton("This Week", callback_data="date_thisweek"),
+                InlineKeyboardButton("Last Week", callback_data="date_lastweek")
+            ],
+            [
+                InlineKeyboardButton("Last 2 Weeks", callback_data="date_last2weeks"),
+                InlineKeyboardButton("This Month", callback_data="date_thismonth")
+            ],
+            [
+                InlineKeyboardButton("Custom Date 📝", callback_data="date_custom")
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            "📅 Please specify the date or date range you want to analyze.\n\n"
-            "Examples:\n"
-            "• August 4, 2025\n"
-            "• yesterday\n"
-            "• last Monday\n"
-            "• this week\n"
-            "• July 1 to July 15\n"
-            "• last 3 days\n"
-            "• first week of July"
+            "📅 Quick Date Analysis\n\n"
+            "Choose a date range or select 'Custom Date' to enter your own:",
+            reply_markup=reply_markup
         )
+    
+    async def handle_date_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle callback from date selection buttons"""
+        query = update.callback_query
+        await query.answer()  # Answer the callback query
+        
+        button_data = query.data
+        user_id = query.from_user.id
+        
+        # Generate parsed_dates based on button selection
+        from datetime import timezone, timedelta
+        philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+        now = datetime.now(philippine_tz)
+        
+        if button_data == "date_yesterday":
+            yesterday = now - timedelta(days=1)
+            parsed_dates = {
+                'type': 'single_date',
+                'dates': [yesterday.strftime('%Y-%m-%d')],
+                'readable_format': yesterday.strftime('%B %d, %Y')
+            }
+            
+        elif button_data == "date_last3days":
+            dates = []
+            for i in range(3):
+                date = now - timedelta(days=i+1)
+                dates.append(date.strftime('%Y-%m-%d'))
+            parsed_dates = {
+                'type': 'date_range',
+                'dates': dates,
+                'readable_format': f"Last 3 Days ({(now - timedelta(days=3)).strftime('%b %d')} - {(now - timedelta(days=1)).strftime('%b %d, %Y')})"
+            }
+            
+        elif button_data == "date_thisweek":
+            # Get this week (Sunday to Saturday)
+            days_since_sunday = (now.weekday() + 1) % 7
+            sunday = now - timedelta(days=days_since_sunday)
+            dates = []
+            for i in range(days_since_sunday + 1):  # From Sunday to today
+                date = sunday + timedelta(days=i)
+                dates.append(date.strftime('%Y-%m-%d'))
+            parsed_dates = {
+                'type': 'date_range',
+                'dates': dates,
+                'readable_format': f"This Week ({sunday.strftime('%b %d')} - {now.strftime('%b %d, %Y')})"
+            }
+            
+        elif button_data == "date_lastweek":
+            # Get last week (Sunday to Saturday)
+            days_since_sunday = (now.weekday() + 1) % 7
+            this_sunday = now - timedelta(days=days_since_sunday)
+            last_sunday = this_sunday - timedelta(days=7)
+            dates = []
+            for i in range(7):  # Full week
+                date = last_sunday + timedelta(days=i)
+                dates.append(date.strftime('%Y-%m-%d'))
+            parsed_dates = {
+                'type': 'date_range',
+                'dates': dates,
+                'readable_format': f"Last Week ({last_sunday.strftime('%b %d')} - {(last_sunday + timedelta(days=6)).strftime('%b %d, %Y')})"
+            }
+            
+        elif button_data == "date_last2weeks":
+            dates = []
+            for i in range(14):
+                date = now - timedelta(days=i+1)
+                dates.append(date.strftime('%Y-%m-%d'))
+            dates.reverse()  # Put in chronological order
+            start_date = now - timedelta(days=14)
+            end_date = now - timedelta(days=1)
+            parsed_dates = {
+                'type': 'date_range',
+                'dates': dates,
+                'readable_format': f"Last 2 Weeks ({start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')})"
+            }
+            
+        elif button_data == "date_thismonth":
+            # Get this month from 1st to today
+            first_of_month = now.replace(day=1)
+            dates = []
+            current_date = first_of_month
+            while current_date <= now:
+                dates.append(current_date.strftime('%Y-%m-%d'))
+                current_date += timedelta(days=1)
+            parsed_dates = {
+                'type': 'date_range',
+                'dates': dates,
+                'readable_format': f"This Month ({first_of_month.strftime('%b %d')} - {now.strftime('%b %d, %Y')})"
+            }
+            
+        elif button_data == "date_custom":
+            # For custom date, fall back to text input
+            self.awaiting_date_input[user_id] = True
+            await query.edit_message_text(
+                "📅 Please specify the date or date range you want to analyze.\n\n"
+                "Examples:\n"
+                "• August 4, 2025\n"
+                "• yesterday\n"
+                "• last Monday\n"
+                "• this week\n"
+                "• July 1 to July 15\n"
+                "• last 3 days\n"
+                "• first week of July"
+            )
+            return
+        
+        else:
+            await query.edit_message_text("❌ Unknown date selection")
+            return
+        
+        # Process the selected date range
+        await query.edit_message_text(f"✅ Analyzing {parsed_dates['readable_format']}...")
+        
+        # Check data availability
+        availability = await self.check_data_availability(parsed_dates)
+        
+        if availability['available_count'] > 0:
+            # Filter to only available dates
+            available_date_strs = []
+            for date_obj in availability['available_dates']:
+                available_date_strs.append(date_obj.strftime('%Y-%m-%d'))
+            
+            filtered_parsed_dates = {
+                'type': parsed_dates['type'],
+                'dates': available_date_strs,
+                'readable_format': parsed_dates['readable_format']
+            }
+            
+            # Analyze sales for the available dates
+            await self.analyze_sales_for_dates_with_query(query, filtered_parsed_dates)
+        else:
+            await query.message.reply_text(
+                "🚫 Cannot perform analysis - no historical data available for the requested period."
+            )
+    
+    async def analyze_sales_for_dates_with_query(self, query, parsed_dates):
+        """Analyze sales data for dates (adapted for callback queries)"""
+        # This is the same logic as analyze_sales_for_dates but adapted for callback queries
+        if not self.sheets_client:
+            await query.message.reply_text("❌ Google Sheets connection not available")
+            return
+        
+        try:
+            # Use the same logic as analyze_sales_for_dates method
+            # But send replies through query.message instead of update.message
+            
+            # Read ORDER sheet data
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            
+            if not data.get('headers') or not data.get('data'):
+                await query.message.reply_text("❌ No order data found")
+                return
+            
+            headers = data['headers']
+            rows = data['data']
+            
+            # Find column indices
+            try:
+                date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+                name_col = headers.index('Name') if 'Name' in headers else 3
+                payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+                delivery_status_col = headers.index('Status (Delivery)') if 'Status (Delivery)' in headers else 8
+                price_col = headers.index('Price') if 'Price' in headers else 27
+                
+                # Product columns
+                p_chz_col, p_sc_col, p_bbq_col, p_og_col = 13, 14, 15, 16
+                t_chz_col, t_sc_col, t_bbq_col, t_og_col = 19, 20, 21, 22
+                
+            except Exception as e:
+                await query.message.reply_text(f"❌ Error finding columns: {str(e)}")
+                return
+            
+            # Convert parsed dates to multiple formats for matching
+            target_dates = []
+            for date_str in parsed_dates['dates']:
+                try:
+                    from datetime import datetime
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    date_formats = [
+                        date_obj.strftime('%B %d, %Y'),
+                        date_obj.strftime('%m/%d/%Y'),
+                        f"{date_obj.month}/{date_obj.day}/{date_obj.year}",
+                        date_obj.strftime('%Y-%m-%d')
+                    ]
+                    target_dates.extend(date_formats)
+                except Exception as e:
+                    logger.error(f"Error formatting date {date_str}: {e}")
+            
+            # Initialize metrics (same as analyze_sales_for_dates)
+            filtered_orders = []
+            total_revenue = 0
+            customers = set()
+            pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_pouches = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_tubs = {'Cheese': 0, 'Sour Cream': 0, 'BBQ': 0, 'Original': 0}
+            paid_customers = []
+            unpaid_customers = []
+            undelivered_orders = []
+            paid_revenue = 0
+            
+            # Filter and process orders (same logic as analyze_sales_for_dates)
+            for row in rows:
+                if len(row) <= 11:
+                    continue
+                
+                has_date = len(row) > 2 and str(row[2]).strip()
+                has_name = len(row) > 3 and str(row[3]).strip()
+                has_summary = len(row) > 11 and str(row[11]).strip()
+                
+                if not (has_date or has_name or has_summary):
+                    continue
+                
+                order_date = row[date_col] if date_col < len(row) else ''
+                order_date_str = str(order_date).strip()
+                
+                is_target_date = False
+                for target_date in target_dates:
+                    if order_date_str == target_date or target_date in order_date_str or order_date_str in target_date:
+                        is_target_date = True
+                        break
+                
+                if is_target_date:
+                    filtered_orders.append(row)
+                    
+                    customer_name = str(row[name_col]).strip() if name_col < len(row) and row[name_col] else 'Unknown Customer'
+                    customers.add(customer_name)
+                    
+                    # Revenue calculation
+                    order_price = 0
+                    try:
+                        price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                        if price_value:
+                            import re
+                            price_str = str(price_value)
+                            numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                            if numeric_parts:
+                                clean_price = numeric_parts[0].replace(',', '')
+                                order_price = float(clean_price)
+                                total_revenue += order_price
+                    except (ValueError, IndexError, AttributeError):
+                        pass
+                    
+                    # Product quantities
+                    try:
+                        pouches['Cheese'] += int(row[p_chz_col]) if p_chz_col < len(row) and str(row[p_chz_col]).strip().isdigit() else 0
+                        pouches['Sour Cream'] += int(row[p_sc_col]) if p_sc_col < len(row) and str(row[p_sc_col]).strip().isdigit() else 0
+                        pouches['BBQ'] += int(row[p_bbq_col]) if p_bbq_col < len(row) and str(row[p_bbq_col]).strip().isdigit() else 0
+                        pouches['Original'] += int(row[p_og_col]) if p_og_col < len(row) and str(row[p_og_col]).strip().isdigit() else 0
+                        
+                        tubs['Cheese'] += int(row[t_chz_col]) if t_chz_col < len(row) and str(row[t_chz_col]).strip().isdigit() else 0
+                        tubs['Sour Cream'] += int(row[t_sc_col]) if t_sc_col < len(row) and str(row[t_sc_col]).strip().isdigit() else 0
+                        tubs['BBQ'] += int(row[t_bbq_col]) if t_bbq_col < len(row) and str(row[t_bbq_col]).strip().isdigit() else 0
+                        tubs['Original'] += int(row[t_og_col]) if t_og_col < len(row) and str(row[t_og_col]).strip().isdigit() else 0
+                    except (ValueError, IndexError):
+                        pass
+                    
+                    # Payment status
+                    payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                    if 'Paid' in payment_status:
+                        paid_customers.append(customer_name)
+                        paid_revenue += order_price
+                        
+                        try:
+                            paid_pouches['Cheese'] += int(row[p_chz_col]) if p_chz_col < len(row) and str(row[p_chz_col]).strip().isdigit() else 0
+                            paid_pouches['Sour Cream'] += int(row[p_sc_col]) if p_sc_col < len(row) and str(row[p_sc_col]).strip().isdigit() else 0
+                            paid_pouches['BBQ'] += int(row[p_bbq_col]) if p_bbq_col < len(row) and str(row[p_bbq_col]).strip().isdigit() else 0
+                            paid_pouches['Original'] += int(row[p_og_col]) if p_og_col < len(row) and str(row[p_og_col]).strip().isdigit() else 0
+                            
+                            paid_tubs['Cheese'] += int(row[t_chz_col]) if t_chz_col < len(row) and str(row[t_chz_col]).strip().isdigit() else 0
+                            paid_tubs['Sour Cream'] += int(row[t_sc_col]) if t_sc_col < len(row) and str(row[t_sc_col]).strip().isdigit() else 0
+                            paid_tubs['BBQ'] += int(row[t_bbq_col]) if t_bbq_col < len(row) and str(row[t_bbq_col]).strip().isdigit() else 0
+                            paid_tubs['Original'] += int(row[t_og_col]) if t_og_col < len(row) and str(row[t_og_col]).strip().isdigit() else 0
+                        except (ValueError, IndexError):
+                            pass
+                    else:
+                        unpaid_customers.append(customer_name)
+                    
+                    # Delivery status
+                    delivery_status = str(row[delivery_status_col]).strip() if delivery_status_col < len(row) and row[delivery_status_col] else 'Pending'
+                    if delivery_status != 'Delivered':
+                        undelivered_orders.append(customer_name)
+            
+            # Calculate totals
+            total_paid_pouches = sum(paid_pouches.values())
+            total_paid_tubs = sum(paid_tubs.values())
+            
+            # Format customer list
+            if customers:
+                sorted_customers = sorted(customers)
+                customer_list_items = []
+                for i, name in enumerate(sorted_customers):
+                    if name in unpaid_customers:
+                        customer_list_items.append(f"{i+1}. {name} ❌")
+                    else:
+                        customer_list_items.append(f"{i+1}. {name}")
+                customer_list = "\n".join(customer_list_items)
+            else:
+                customer_list = "None"
+            
+            # Format undelivered names
+            def format_numbered_names(names):
+                if not names:
+                    return "None"
+                sorted_names = sorted(names)
+                numbered_names = [f"{i+1}. {name.split()[0]} {name.split()[-1][0]}." for i, name in enumerate(sorted_names)]
+                return "\n".join(numbered_names)
+            
+            undelivered_formatted = format_numbered_names(undelivered_orders)
+            
+            # Get contextual performance analysis
+            performance_data = self.get_contextual_performance(parsed_dates, paid_revenue)
+            performance_text = self.format_contextual_performance(performance_data, paid_revenue)
+            
+            # Get AI insights (same as analyze_sales_for_dates)
+            structured_summary = f"""📊 Sales Report for {parsed_dates['readable_format']}
+
+💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+{customer_list}
+
+✏️ Order:
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
+
+🚚 Delivery:
+Undelivered ({len(undelivered_orders)}):
+{undelivered_formatted}
+            """
+            
+            # Get AI insights  
+            try:
+                performance_context = f"""
+
+Performance Context:
+{performance_text}
+"""
+                
+                response = self.anthropic_client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=300,
+                    messages=[{
+                        "role": "user",
+                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled).{performance_context}\n\n{structured_summary}"
+                    }]
+                )
+                ai_insights = response.content[0].text
+            except Exception as e:
+                ai_insights = f"AI analysis unavailable: {str(e)}"
+            
+            # Create final message
+            final_message = f"""📊 Sales Report for {parsed_dates['readable_format']}
+
+🎇 Claude Insights:
+
+{performance_text}
+
+{ai_insights}
+
+💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+{customer_list}
+
+✏️ Order:
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
+
+🚚 Delivery:
+Undelivered ({len(undelivered_orders)}):
+{undelivered_formatted}
+"""
+            
+            # Send response (split if too long)
+            if len(final_message) > 4000:
+                header_insights = f"""📊 Sales Report for {parsed_dates['readable_format']}
+
+🎇 Claude Insights:
+
+{performance_text}
+
+{ai_insights}"""
+                
+                details = f"""💰 Revenue: ₱{paid_revenue:,.0f}/₱{total_revenue:,.0f} | 👥 {len(customers)} Customers
+{customer_list}
+
+✏️ Order:
+Pouches ({total_paid_pouches})
+Cheese {paid_pouches['Cheese']} | Sour Cream {paid_pouches['Sour Cream']} | BBQ {paid_pouches['BBQ']} | Original {paid_pouches['Original']}
+Tubs ({total_paid_tubs})
+Cheese {paid_tubs['Cheese']} | Sour Cream {paid_tubs['Sour Cream']} | BBQ {paid_tubs['BBQ']} | Original {paid_tubs['Original']}
+
+🚚 Delivery:
+Undelivered ({len(undelivered_orders)}):
+{undelivered_formatted}"""
+                
+                await query.message.reply_text(header_insights)
+                await query.message.reply_text(details)
+            else:
+                await query.message.reply_text(final_message)
+                
+        except Exception as e:
+            logger.error(f"Error in analyze_sales_for_dates_with_query: {e}")
+            await query.message.reply_text(f"❌ Error analyzing sales data: {str(e)}")
     
     async def parse_date_with_llm(self, user_message):
         """Use Anthropic LLM to parse user's date input"""
@@ -1947,6 +2363,7 @@ Undelivered ({len(undelivered_orders)}):
             application.add_handler(CommandHandler("sales_today", self.sales_today_command))
             application.add_handler(CommandHandler("sales_this_week", self.sales_this_week_command))
             application.add_handler(CommandHandler("sales_customdate", self.sales_customdate_command))
+            application.add_handler(CallbackQueryHandler(self.handle_date_button, pattern="^date_"))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
             
             # Set up bot commands menu
