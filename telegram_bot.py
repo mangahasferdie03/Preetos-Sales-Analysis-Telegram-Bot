@@ -878,9 +878,9 @@ class TelegramGoogleSheetsBot:
                 target_percentage = (this_month_total / target_amount) * 100
                 remaining_amount = target_amount - this_month_total
 
-                target_line = f"• Target: {target_percentage:.0f}% • ₱{this_month_total:,.0f} / ₱{target_amount:,.0f} • ₱{remaining_amount:,.0f} left"
+                target_line = f"- Target Progress: {target_percentage:.0f}% (₱{this_month_total:,.0f} / ₱{target_amount:,.0f}) → ₱{remaining_amount:,.0f} left"
             else:
-                target_line = "• Target: No data available"
+                target_line = "- Target: No data available"
 
             return {
                 'line': target_line,
@@ -996,78 +996,104 @@ class TelegramGoogleSheetsBot:
                 return f"⚠️ {performance_data.get('note', 'Performance analysis unavailable')}"
             
             elif context == 'long_period':
-                return f"📈 Extended period analysis: ₱{current_revenue:,.0f}\n{target_line}\n• {performance_data.get('note', 'Limited comparison data')}"
+                lines = [f"📈 Extended Period Analysis"]
+                lines.append(f"- Revenue: ₱{current_revenue:,.0f}")
+                lines.append(target_line)
+                lines.append("")
+                lines.append("📊 Analysis")
+                lines.append(f"- {performance_data.get('note', 'Limited comparison data')}")
+                return "\n".join(lines)
             
             elif context == 'single_day':
-                lines = [f"📈 Single Day Performance: ₱{current_revenue:,.0f}"]
+                lines = [f"📈 Single Day Performance"]
+                lines.append(f"- Revenue: ₱{current_revenue:,.0f}")
                 lines.append(target_line)
+                lines.append("")  # Blank line
+
+                comparison_lines = ["📊 Comparisons"]
 
                 if performance_data.get('seven_day_avg', 0) > 0:
                     diff = performance_data.get('seven_day_avg_diff', 0)
-                    lines.append(f"• Vs 7-day avg: {diff:+.1f}% (₱{performance_data['seven_day_avg']:,.0f} avg)")
-                
+                    comparison_lines.append(f"- Vs 7-day avg: {diff:+.1f}% (₱{performance_data['seven_day_avg']:,.0f})")
+
                 if performance_data.get('last_week_same_day', 0) > 0:
                     diff = performance_data.get('last_week_same_day_diff', 0)
-                    lines.append(f"• Vs same day last week: {diff:+.1f}% (₱{performance_data['last_week_same_day']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs same day last week: {diff:+.1f}% (₱{performance_data['last_week_same_day']:,.0f})")
+
                 if performance_data.get('weekday_pattern_avg', 0) > 0:
                     diff = performance_data.get('weekday_pattern_avg_diff', 0)
-                    lines.append(f"• Vs weekday pattern: {diff:+.1f}% (₱{performance_data['weekday_pattern_avg']:,.0f} avg)")
-                
+                    comparison_lines.append(f"- Vs weekday pattern: {diff:+.1f}% (₱{performance_data['weekday_pattern_avg']:,.0f})")
+
+                lines.extend(comparison_lines)
                 return "\n".join(lines)
             
             elif context == 'short_range':
-                lines = [f"📈 Short Range Performance: ₱{current_revenue:,.0f}"]
+                lines = [f"📈 Short Range Performance"]
+                lines.append(f"- Revenue: ₱{current_revenue:,.0f}")
                 lines.append(target_line)
+                lines.append("")
+
+                comparison_lines = ["📊 Comparisons"]
 
                 if performance_data.get('previous_period', 0) > 0:
                     diff = performance_data.get('previous_period_diff', 0)
-                    lines.append(f"• Vs previous period: {diff:+.1f}% (₱{performance_data['previous_period']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs previous period: {diff:+.1f}% (₱{performance_data['previous_period']:,.0f})")
+
                 if performance_data.get('rolling_avg', 0) > 0:
                     diff = performance_data.get('rolling_avg_diff', 0)
-                    lines.append(f"• Vs 4-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_avg']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs 4-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_avg']:,.0f})")
+
                 if performance_data.get('same_period_last_month', 0) > 0:
                     diff = performance_data.get('same_period_last_month_diff', 0)
-                    lines.append(f"• Vs same period last month: {diff:+.1f}% (₱{performance_data['same_period_last_month']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs same period last month: {diff:+.1f}% (₱{performance_data['same_period_last_month']:,.0f})")
+
+                lines.extend(comparison_lines)
                 return "\n".join(lines)
             
             elif context == 'two_weeks':
-                lines = [f"📈 Two Week Performance: ₱{current_revenue:,.0f}"]
+                lines = [f"📈 Two Week Performance"]
+                lines.append(f"- Revenue: ₱{current_revenue:,.0f}")
                 lines.append(target_line)
+                lines.append("")
+
+                comparison_lines = ["📊 Comparisons"]
 
                 if performance_data.get('previous_2_weeks', 0) > 0:
                     diff = performance_data.get('previous_2_weeks_diff', 0)
-                    lines.append(f"• Vs previous 2 weeks: {diff:+.1f}% (₱{performance_data['previous_2_weeks']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs previous 2 weeks: {diff:+.1f}% (₱{performance_data['previous_2_weeks']:,.0f})")
+
                 if performance_data.get('rolling_8week_avg', 0) > 0:
                     diff = performance_data.get('rolling_8week_avg_diff', 0)
-                    lines.append(f"• Vs 8-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_8week_avg']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs 8-week rolling avg: {diff:+.1f}% (₱{performance_data['rolling_8week_avg']:,.0f})")
+
                 if performance_data.get('same_2weeks_last_month', 0) > 0:
                     diff = performance_data.get('same_2weeks_last_month_diff', 0)
-                    lines.append(f"• Vs same 2 weeks last month: {diff:+.1f}% (₱{performance_data['same_2weeks_last_month']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs same 2 weeks last month: {diff:+.1f}% (₱{performance_data['same_2weeks_last_month']:,.0f})")
+
+                lines.extend(comparison_lines)
                 return "\n".join(lines)
             
             elif context == 'monthly':
-                lines = [f"📈 Monthly Performance: ₱{current_revenue:,.0f}"]
+                lines = [f"📈 Monthly Performance"]
+                lines.append(f"- Revenue: ₱{current_revenue:,.0f}")
                 lines.append(target_line)
+                lines.append("")
+
+                comparison_lines = ["📊 Comparisons"]
 
                 if performance_data.get('previous_month', 0) > 0:
                     diff = performance_data.get('previous_month_diff', 0)
-                    lines.append(f"• Vs previous month: {diff:+.1f}% (₱{performance_data['previous_month']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs previous month: {diff:+.1f}% (₱{performance_data['previous_month']:,.0f})")
+
                 if performance_data.get('quarterly_avg', 0) > 0:
                     diff = performance_data.get('quarterly_avg_diff', 0)
-                    lines.append(f"• Vs quarterly avg: {diff:+.1f}% (₱{performance_data['quarterly_avg']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs quarterly avg: {diff:+.1f}% (₱{performance_data['quarterly_avg']:,.0f})")
+
                 if performance_data.get('same_month_last_year', 0) > 0:
                     diff = performance_data.get('same_month_last_year_diff', 0)
-                    lines.append(f"• Vs same month last year: {diff:+.1f}% (₱{performance_data['same_month_last_year']:,.0f})")
-                
+                    comparison_lines.append(f"- Vs same month last year: {diff:+.1f}% (₱{performance_data['same_month_last_year']:,.0f})")
+
+                lines.extend(comparison_lines)
                 return "\n".join(lines)
             
             else:
@@ -2159,9 +2185,7 @@ Performance Context:
                 ai_insights = f"AI analysis unavailable: {str(e)}"
             
             # Create final message
-            final_message = f"""📊 Sales Report for {parsed_dates['readable_format']}
-
-🎇 Claude Insights:
+            final_message = f"""🎇 Sales Report — {parsed_dates['readable_format']}
 
 {performance_text}
 
@@ -2183,9 +2207,7 @@ Undelivered ({len(undelivered_orders)}):
             
             # Send response (split if too long)
             if len(final_message) > 4000:
-                header_insights = f"""📊 Sales Report for {parsed_dates['readable_format']}
-
-🎇 Claude Insights:
+                header_insights = f"""🎇 Sales Report — {parsed_dates['readable_format']}
 
 {performance_text}
 
@@ -2563,9 +2585,7 @@ Performance Context:
                 ai_insights = f"AI analysis unavailable: {str(e)}"
             
             # Create final message with contextual performance
-            final_message = f"""📊 Sales Report for {parsed_dates['readable_format']}
-
-🎇 Claude Insights:
+            final_message = f"""🎇 Sales Report — {parsed_dates['readable_format']}
 
 {performance_text}
 
@@ -2587,9 +2607,7 @@ Undelivered ({len(undelivered_orders)}):
             
             # Send response (split if too long)
             if len(final_message) > 4000:
-                header_insights = f"""📊 Sales Report for {parsed_dates['readable_format']}
-
-🎇 Claude Insights:
+                header_insights = f"""🎇 Sales Report — {parsed_dates['readable_format']}
 
 {performance_text}
 
