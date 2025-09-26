@@ -292,7 +292,97 @@ class TelegramGoogleSheetsBot:
         except Exception as e:
             logger.error(f"Error calculating 30-day average: {e}")
             return 0
-    
+
+    def calculate_last_month_total(self):
+        """Calculate last month's total revenue for target calculation"""
+        if not self.sheets_client:
+            return 0
+
+        try:
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
+
+            # Calculate first and last day of previous month
+            first_day_current_month = now.replace(day=1)
+            last_day_previous_month = first_day_current_month - timedelta(days=1)
+            first_day_previous_month = last_day_previous_month.replace(day=1)
+
+            # Get data from ORDER sheet
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0
+
+            headers = data['headers']
+            rows = data['data']
+
+            # Find column indices
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+
+            total_revenue = 0
+
+            # Generate all dates for the previous month
+            current_date = first_day_previous_month
+            previous_month_dates = []
+
+            while current_date <= last_day_previous_month:
+                date_formats = [
+                    current_date.strftime('%B %d, %Y'),  # August 01, 2025
+                    current_date.strftime('%m/%d/%Y'),   # 08/01/2025
+                    f"{current_date.month}/{current_date.day}/{current_date.year}",  # 8/1/2025
+                    current_date.strftime('%Y-%m-%d'),   # 2025-08-01
+                ]
+                previous_month_dates.extend(date_formats)
+                current_date += timedelta(days=1)
+
+            # Process each row to find orders from previous month
+            for row in rows:
+                if len(row) <= 11:
+                    continue
+
+                # Valid order check
+                has_date = len(row) > 2 and str(row[2]).strip()
+                has_name = len(row) > 3 and str(row[3]).strip()
+                has_summary = len(row) > 11 and str(row[11]).strip()
+
+                if not (has_date or has_name or has_summary):
+                    continue
+
+                # Check if order is from previous month
+                order_date = row[date_col] if date_col < len(row) else ''
+                order_date_str = str(order_date).strip()
+
+                is_previous_month = False
+                for date_format in previous_month_dates:
+                    if order_date_str == date_format or date_format in order_date_str or order_date_str in date_format:
+                        is_previous_month = True
+                        break
+
+                if is_previous_month:
+                    # Check payment status (only paid orders)
+                    payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                    if 'Paid' in payment_status:
+                        # Calculate revenue
+                        try:
+                            price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                            if price_value:
+                                import re
+                                price_str = str(price_value)
+                                numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                if numeric_parts:
+                                    clean_price = numeric_parts[0].replace(',', '')
+                                    total_revenue += float(clean_price)
+                        except (ValueError, IndexError, AttributeError):
+                            pass
+
+            return total_revenue
+
+        except Exception as e:
+            logger.error(f"Error calculating last month total: {e}")
+            return 0
+
     def calculate_performance_streak(self, today_revenue, seven_day_avg):
         """Calculate consecutive days above or below 7-day average"""
         if not self.sheets_client or seven_day_avg == 0:
@@ -396,11 +486,119 @@ class TelegramGoogleSheetsBot:
                 streak_type = f"consecutive days {current_pattern} 7-day average"
             
             return streak_count, streak_type
-            
+
         except Exception as e:
             logger.error(f"Error calculating performance streak: {e}")
             return 0, ""
-    
+
+    def calculate_target_streak(self, today_revenue, target_amount):
+        """Calculate consecutive days above or below target amount"""
+        if not self.sheets_client or target_amount == 0:
+            return 0, ""
+
+        try:
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))  # UTC+8
+            now = datetime.now(philippine_tz)
+
+            # Get data from ORDER sheet
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+            if not data.get('headers') or not data.get('data'):
+                return 0, ""
+
+            headers = data['headers']
+            rows = data['data']
+
+            # Find column indices
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+
+            daily_revenues = []
+
+            # Get daily revenues for last 10 days to calculate streak
+            for days_back in range(10):
+                target_date = now - timedelta(days=days_back)
+                target_date_formats = [
+                    target_date.strftime('%B %d, %Y'),  # August 01, 2025
+                    target_date.strftime('%m/%d/%Y'),   # 08/01/2025
+                    f"{target_date.month}/{target_date.day}/{target_date.year}",  # 8/1/2025
+                    target_date.strftime('%Y-%m-%d'),   # 2025-08-01
+                ]
+
+                day_revenue = 0
+                day_has_orders = False
+
+                for row in rows:
+                    if len(row) <= 11:
+                        continue
+
+                    # Valid order check
+                    has_date = len(row) > 2 and str(row[2]).strip()
+                    has_name = len(row) > 3 and str(row[3]).strip()
+                    has_summary = len(row) > 11 and str(row[11]).strip()
+
+                    if not (has_date or has_name or has_summary):
+                        continue
+
+                    # Check if order is from target date
+                    order_date = row[date_col] if date_col < len(row) else ''
+                    order_date_str = str(order_date).strip()
+
+                    is_target_day = False
+                    for date_format in target_date_formats:
+                        if order_date_str == date_format or date_format in order_date_str or order_date_str in date_format:
+                            is_target_day = True
+                            break
+
+                    if is_target_day:
+                        day_has_orders = True
+
+                        # Check payment status (only paid orders)
+                        payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                        if 'Paid' in payment_status:
+                            # Calculate revenue
+                            try:
+                                price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                                if price_value:
+                                    import re
+                                    price_str = str(price_value)
+                                    numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                    if numeric_parts:
+                                        clean_price = numeric_parts[0].replace(',', '')
+                                        day_revenue += float(clean_price)
+                            except (ValueError, IndexError, AttributeError):
+                                pass
+
+                if day_has_orders:
+                    daily_revenues.append(day_revenue)
+                else:
+                    daily_revenues.append(0)
+
+            # Calculate streak - check if consecutive days are above or below target
+            streak_count = 0
+            streak_type = ""
+
+            if daily_revenues:
+                # Determine if today is above or below target
+                is_above_target = today_revenue > target_amount
+                current_pattern = "above" if is_above_target else "below"
+
+                # Count consecutive days with same pattern
+                for daily_rev in daily_revenues:
+                    if (daily_rev > target_amount) == is_above_target:
+                        streak_count += 1
+                    else:
+                        break
+
+                streak_type = f"day{'s' if streak_count != 1 else ''} {current_pattern} target"
+
+            return streak_count, streak_type
+
+        except Exception as e:
+            logger.error(f"Error calculating target streak: {e}")
+            return 0, ""
+
     def calculate_revenue_for_dates(self, target_dates):
         """Calculate total revenue for specific dates"""
         if not self.sheets_client:
@@ -962,7 +1160,13 @@ class TelegramGoogleSheetsBot:
             seven_day_avg = self.calculate_7_day_average()
             thirty_day_avg = self.calculate_30_day_average()
             streak_count, streak_type = self.calculate_performance_streak(paid_revenue, seven_day_avg)
-            
+
+            # Calculate target-based metrics
+            last_month_total = self.calculate_last_month_total()
+            target_amount = last_month_total * 1.10  # Last month total + 10%
+            target_achievement = ((paid_revenue / target_amount) * 100) if target_amount > 0 else 0
+            target_streak_count, target_streak_type = self.calculate_target_streak(paid_revenue, target_amount)
+
             # Calculate percentage differences
             seven_day_diff = ((paid_revenue - seven_day_avg) / seven_day_avg * 100) if seven_day_avg > 0 else 0
             thirty_day_diff = ((paid_revenue - thirty_day_avg) / thirty_day_avg * 100) if thirty_day_avg > 0 else 0
@@ -1061,7 +1265,7 @@ Sales Data:
                     max_tokens=800,
                     messages=[{
                         "role": "user",
-                        "content": f"""Shorten the following sales analysis while keeping the same casual, friendly, and business-oriented tone. Keep all key numbers, trends, and action points. Remove extra words or repetitive phrasings. Keep it structured with just a short 'Summary' section. Keep it short to 1 paragraph and around 3 sentences. If there is a lot to unpack, you can do 4 sentences. Also mention that unpaid orders may simply mean we haven't updated our tracker yet, or that customers just haven't paid yet.
+                        "content": f"""Shorten the following sales analysis while keeping the same casual, friendly, and business-oriented tone. Keep all key numbers, trends, and action points. Remove extra words or repetitive phrasings. Keep it structured with just a short 'Summary' section. Keep it short to 1 paragraph and around 3 sentences. If there is a lot to unpack, you can do 4 sentences.
 
 Format your response exactly like this:
 
@@ -1084,10 +1288,11 @@ Remember: Unpaid customers (marked ❌) might just mean we haven't updated the t
 🎇 Claude Insights:
 
 Revenue Performance:
-• Today: ₱{paid_revenue:,.0f}
+• Today: ₱{paid_revenue:,.0f} ({len(customers)} customers)
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
-• Streak: {streak_count} {streak_type}
+• Target ({target_achievement:.0f}%): ₱{target_amount:,.0f}
+• Streak: {target_streak_count} {target_streak_type}
 • Cause: {cause_text}
 
 {ai_insights}
@@ -1114,10 +1319,11 @@ Undelivered ({len(undelivered_orders)}):
 🎇 Claude Insights:
 
 Revenue Performance:
-• Today: ₱{paid_revenue:,.0f}
+• Today: ₱{paid_revenue:,.0f} ({len(customers)} customers)
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
-• Streak: {streak_count} {streak_type}
+• Target ({target_achievement:.0f}%): ₱{target_amount:,.0f}
+• Streak: {target_streak_count} {target_streak_type}
 • Cause: {cause_text}
 
 {ai_insights}"""
@@ -1386,7 +1592,7 @@ Undelivered ({len(undelivered_orders)}): {undelivered_formatted}
                     max_tokens=200,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of this week's sales performance. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled):\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of this week's sales performance. Keep it concise and friendly - no recommendations needed:\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
@@ -1816,7 +2022,7 @@ Performance Context:
                     max_tokens=300,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled).{performance_context}\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed.{performance_context}\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
@@ -2220,7 +2426,7 @@ Performance Context:
                     max_tokens=300,
                     messages=[{
                         "role": "user",
-                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed. Note: customers marked with ❌ are waiting for payment (not cancelled).{partial_note}{performance_context}\n\n{structured_summary}"
+                        "content": f"Give me a brief, conversational summary of sales performance for this period. Keep it concise and friendly - no recommendations needed.{partial_note}{performance_context}\n\n{structured_summary}"
                     }]
                 )
                 ai_insights = response.content[0].text
@@ -2345,9 +2551,8 @@ Undelivered ({len(undelivered_orders)}):
         from telegram import BotCommand
         
         commands = [
-            BotCommand("sales_today", "Today's sales analysis with AI"),
-            BotCommand("sales_this_week", "This week's sales analysis with AI"),
-            BotCommand("sales_customdate", "Custom date sales analysis"),
+            BotCommand("today", "Today's sales analysis with AI"),
+            BotCommand("custom", "Custom date sales analysis"),
         ]
         
         try:
@@ -2363,9 +2568,8 @@ Undelivered ({len(undelivered_orders)}):
             application = Application.builder().token(self.telegram_token).build()
             
             # Add handlers
-            application.add_handler(CommandHandler("sales_today", self.sales_today_command))
-            application.add_handler(CommandHandler("sales_this_week", self.sales_this_week_command))
-            application.add_handler(CommandHandler("sales_customdate", self.sales_customdate_command))
+            application.add_handler(CommandHandler("today", self.sales_today_command))
+            application.add_handler(CommandHandler("custom", self.sales_customdate_command))
             application.add_handler(CallbackQueryHandler(self.handle_date_button, pattern="^date_"))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
             
