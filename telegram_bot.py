@@ -1253,8 +1253,6 @@ Revenue Performance Analysis for {date_formatted}:
 • 30-day average: ₱{thirty_day_avg:,.0f} 
 • vs 7-day: {seven_day_diff:+.1f}%
 • vs 30-day: {thirty_day_diff:+.1f}%
-• Streak: {streak_count} {streak_type}
-• Main drivers: {cause_text}
 
 Sales Data:
 {structured_summary}
@@ -1292,8 +1290,6 @@ Revenue Performance:
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
 • Target ({target_achievement:.0f}%): ₱{target_amount:,.0f}
-• Streak: {target_streak_count} {target_streak_type}
-• Cause: {cause_text}
 
 {ai_insights}
 
@@ -1323,8 +1319,6 @@ Revenue Performance:
 • Vs 7-day avg: {seven_day_diff:+.1f}% (₱{seven_day_avg:,.0f} avg)
 • Vs 30-day avg: {thirty_day_diff:+.1f}% (₱{thirty_day_avg:,.0f} avg)
 • Target ({target_achievement:.0f}%): ₱{target_amount:,.0f}
-• Streak: {target_streak_count} {target_streak_type}
-• Cause: {cause_text}
 
 {ai_insights}"""
                 
@@ -2551,7 +2545,6 @@ Undelivered ({len(undelivered_orders)}):
         from telegram import BotCommand
         
         commands = [
-            BotCommand("today", "Today's sales analysis with AI"),
             BotCommand("custom", "Custom date sales analysis"),
         ]
         
