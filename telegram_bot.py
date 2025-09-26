@@ -863,21 +863,145 @@ class TelegramGoogleSheetsBot:
             f"{date_obj.month}/{date_obj.day}/{date_obj.year}",  # 8/1/2025
             date_obj.strftime('%Y-%m-%d'),   # 2025-08-01
         ]
-    
+
+    def get_monthly_target_info(self):
+        """Calculate and format monthly target information"""
+        try:
+            # Calculate this month's total revenue
+            this_month_total = self.calculate_this_month_total()
+
+            # Calculate target (last month + 10%)
+            last_month_total = self.calculate_last_month_total()
+            target_amount = last_month_total * 1.10 if last_month_total > 0 else 0
+
+            if target_amount > 0:
+                target_percentage = (this_month_total / target_amount) * 100
+                remaining_amount = target_amount - this_month_total
+
+                target_line = f"• Target: {target_percentage:.0f}% • ₱{this_month_total:,.0f} / ₱{target_amount:,.0f} • ₱{remaining_amount:,.0f} left"
+            else:
+                target_line = "• Target: No data available"
+
+            return {
+                'line': target_line,
+                'percentage': target_percentage if target_amount > 0 else 0,
+                'this_month_total': this_month_total,
+                'target_amount': target_amount,
+                'remaining': remaining_amount if target_amount > 0 else 0
+            }
+        except Exception as e:
+            return {
+                'line': "• Target: Calculation unavailable",
+                'percentage': 0,
+                'this_month_total': 0,
+                'target_amount': 0,
+                'remaining': 0
+            }
+
+    def calculate_this_month_total(self):
+        """Calculate this month's total revenue"""
+        if not self.sheets_client:
+            return 0
+
+        try:
+            from datetime import timezone, timedelta
+            philippine_tz = timezone(timedelta(hours=8))
+            now = datetime.now(philippine_tz)
+
+            # Get this month's date range (1st to today)
+            first_day_this_month = now.replace(day=1)
+            this_month_dates = []
+
+            current_date = first_day_this_month
+            while current_date <= now:
+                this_month_dates.extend([
+                    current_date.strftime('%B %d, %Y'),  # September 15, 2025
+                    current_date.strftime('%m/%d/%Y'),   # 09/15/2025
+                    f"{current_date.month}/{current_date.day}/{current_date.year}",  # 9/15/2025
+                    current_date.strftime('%Y-%m-%d'),   # 2025-09-15
+                ])
+                current_date += timedelta(days=1)
+
+            # Read ORDER sheet data
+            data = self.sheets_client.read_sheet(sheet_name='ORDER', range_name='A:AF')
+
+            if not data.get('headers') or not data.get('data'):
+                return 0
+
+            headers = data['headers']
+            rows = data['data']
+
+            # Find column indices
+            date_col = headers.index('Order Date') if 'Order Date' in headers else 2
+            payment_status_col = headers.index('Status Payment') if 'Status Payment' in headers else 7
+            price_col = headers.index('Price') if 'Price' in headers else 27
+
+            total_revenue = 0
+
+            for row in rows:
+                if len(row) <= 11:
+                    continue
+
+                has_date = len(row) > 2 and str(row[2]).strip()
+                has_name = len(row) > 3 and str(row[3]).strip()
+                has_summary = len(row) > 11 and str(row[11]).strip()
+
+                if not (has_date or has_name or has_summary):
+                    continue
+
+                # Check if order is from this month
+                order_date = row[date_col] if date_col < len(row) else ''
+                order_date_str = str(order_date).strip()
+
+                is_this_month = False
+                for month_date in this_month_dates:
+                    if order_date_str == month_date or month_date in order_date_str or order_date_str in month_date:
+                        is_this_month = True
+                        break
+
+                if is_this_month:
+                    # Check payment status (only paid orders)
+                    payment_status = str(row[payment_status_col]).strip() if payment_status_col < len(row) and row[payment_status_col] else 'Unpaid'
+                    if 'Paid' in payment_status:
+                        # Calculate revenue
+                        try:
+                            price_value = row[price_col] if price_col < len(row) and row[price_col] else 0
+                            if price_value:
+                                import re
+                                price_str = str(price_value)
+                                numeric_parts = re.findall(r'[0-9.,]+', price_str)
+                                if numeric_parts:
+                                    clean_price = numeric_parts[0].replace(',', '')
+                                    order_price = float(clean_price)
+                                    total_revenue += order_price
+                        except (ValueError, IndexError, AttributeError):
+                            pass
+
+            return total_revenue
+
+        except Exception as e:
+            logger.error(f"Error calculating this month total: {e}")
+            return 0
+
     def format_contextual_performance(self, performance_data, current_revenue):
         """Format contextual performance data into readable text"""
         try:
+            # Calculate monthly target for all contexts
+            target_info = self.get_monthly_target_info()
+            target_line = target_info['line']
+
             context = performance_data.get('context', 'unknown')
             
             if context == 'error':
                 return f"⚠️ {performance_data.get('note', 'Performance analysis unavailable')}"
             
             elif context == 'long_period':
-                return f"📈 Extended period analysis: ₱{current_revenue:,.0f}\n• {performance_data.get('note', 'Limited comparison data')}"
+                return f"📈 Extended period analysis: ₱{current_revenue:,.0f}\n{target_line}\n• {performance_data.get('note', 'Limited comparison data')}"
             
             elif context == 'single_day':
                 lines = [f"📈 Single Day Performance: ₱{current_revenue:,.0f}"]
-                
+                lines.append(target_line)
+
                 if performance_data.get('seven_day_avg', 0) > 0:
                     diff = performance_data.get('seven_day_avg_diff', 0)
                     lines.append(f"• Vs 7-day avg: {diff:+.1f}% (₱{performance_data['seven_day_avg']:,.0f} avg)")
@@ -894,7 +1018,8 @@ class TelegramGoogleSheetsBot:
             
             elif context == 'short_range':
                 lines = [f"📈 Short Range Performance: ₱{current_revenue:,.0f}"]
-                
+                lines.append(target_line)
+
                 if performance_data.get('previous_period', 0) > 0:
                     diff = performance_data.get('previous_period_diff', 0)
                     lines.append(f"• Vs previous period: {diff:+.1f}% (₱{performance_data['previous_period']:,.0f})")
@@ -911,7 +1036,8 @@ class TelegramGoogleSheetsBot:
             
             elif context == 'two_weeks':
                 lines = [f"📈 Two Week Performance: ₱{current_revenue:,.0f}"]
-                
+                lines.append(target_line)
+
                 if performance_data.get('previous_2_weeks', 0) > 0:
                     diff = performance_data.get('previous_2_weeks_diff', 0)
                     lines.append(f"• Vs previous 2 weeks: {diff:+.1f}% (₱{performance_data['previous_2_weeks']:,.0f})")
@@ -928,7 +1054,8 @@ class TelegramGoogleSheetsBot:
             
             elif context == 'monthly':
                 lines = [f"📈 Monthly Performance: ₱{current_revenue:,.0f}"]
-                
+                lines.append(target_line)
+
                 if performance_data.get('previous_month', 0) > 0:
                     diff = performance_data.get('previous_month_diff', 0)
                     lines.append(f"• Vs previous month: {diff:+.1f}% (₱{performance_data['previous_month']:,.0f})")
@@ -1649,18 +1776,19 @@ Undelivered ({len(undelivered_orders)}):
         # Create inline keyboard with quick date options
         keyboard = [
             [
-                InlineKeyboardButton("Yesterday", callback_data="date_yesterday"),
-                InlineKeyboardButton("Last 3 Days", callback_data="date_last3days")
+                InlineKeyboardButton("Today", callback_data="date_today"),
+                InlineKeyboardButton("Yesterday", callback_data="date_yesterday")
             ],
             [
-                InlineKeyboardButton("This Week", callback_data="date_thisweek"),
-                InlineKeyboardButton("Last Week", callback_data="date_lastweek")
+                InlineKeyboardButton("Last 3 Days", callback_data="date_last3days"),
+                InlineKeyboardButton("This Week", callback_data="date_thisweek")
             ],
             [
-                InlineKeyboardButton("Last 2 Weeks", callback_data="date_last2weeks"),
-                InlineKeyboardButton("This Month", callback_data="date_thismonth")
+                InlineKeyboardButton("Last Week", callback_data="date_lastweek"),
+                InlineKeyboardButton("Last 2 Weeks", callback_data="date_last2weeks")
             ],
             [
+                InlineKeyboardButton("This Month", callback_data="date_thismonth"),
                 InlineKeyboardButton("Custom Date 📝", callback_data="date_custom")
             ]
         ]
@@ -1686,7 +1814,14 @@ Undelivered ({len(undelivered_orders)}):
         philippine_tz = timezone(timedelta(hours=8))  # UTC+8
         now = datetime.now(philippine_tz)
         
-        if button_data == "date_yesterday":
+        if button_data == "date_today":
+            parsed_dates = {
+                'type': 'single_date',
+                'dates': [now.strftime('%Y-%m-%d')],
+                'readable_format': now.strftime('%B %d, %Y')
+            }
+
+        elif button_data == "date_yesterday":
             yesterday = now - timedelta(days=1)
             parsed_dates = {
                 'type': 'single_date',
