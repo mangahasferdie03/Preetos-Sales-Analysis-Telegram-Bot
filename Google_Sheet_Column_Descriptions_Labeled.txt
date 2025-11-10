@@ -1,0 +1,31 @@
+Y - This is the year of the order date
+M - This is the month of the order date
+Order Date - Date the order was placed
+Name - Customer name
+Sold By - Dropdown: Ferdie for Quezon City pick-ups, Nina for Paranaque
+
+G - Payment mode dropdown (typically Gcash, BPI, Cash)
+H - Payment Status (Paid/Unpaid)
+I - Delivery Status
+
+Product Quantities - Pouch varieties:
+N - Cheese Pouch
+O - Sour Cream Pouch
+P - BBQ Pouch
+Q - Original Pouch
+
+Product Quantities - Tub varieties (2L sizes):
+T - Cheese Tub
+U - Sour Cream Tub
+V - BBQ Tub
+W - Original Tub
+
+Financial columns:
+Z - SF (Shipping fee)
+AB - Disc (Discount given)
+AC - Price (auto-calculated)
+
+Metadata:
+Notes column
+Summary Order (auto-generated breakdown)
+Several blank/deprecated columns marked for leaving empty
