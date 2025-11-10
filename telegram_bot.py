@@ -1127,6 +1127,23 @@ Use the menu buttons below or these commands:
 
         await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
+    async def getchatid_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Get the current chat ID (useful for setting up group reports)"""
+        chat_id = update.effective_chat.id
+        chat_type = update.effective_chat.type
+        chat_title = update.effective_chat.title if chat_type in ['group', 'supergroup'] else "Private Chat"
+
+        message = f"""📋 Chat Information:
+
+**Chat ID**: `{chat_id}`
+**Chat Type**: {chat_type}
+**Chat Name**: {chat_title}
+
+💡 To enable automated reports for this chat, add this to Railway:
+`REPORT_CHAT_ID={chat_id}`"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
     async def sales_today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get today's sales analysis with AI insights"""
         if not self.sheets_client or not self.anthropic_client:
@@ -2838,6 +2855,7 @@ Undelivered ({len(undelivered_orders)}):
 
             # Add handlers
             application.add_handler(CommandHandler("start", self.start_command))
+            application.add_handler(CommandHandler("getchatid", self.getchatid_command))
             application.add_handler(CommandHandler("today", self.sales_today_command))
             application.add_handler(CommandHandler("custom", self.sales_customdate_command))
             application.add_handler(CallbackQueryHandler(self.handle_date_button, pattern="^date_"))
