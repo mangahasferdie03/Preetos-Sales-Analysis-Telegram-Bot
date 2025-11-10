@@ -1110,8 +1110,7 @@ class TelegramGoogleSheetsBot:
         """Start command with menu keyboard"""
         # Create custom keyboard with menu buttons
         keyboard = [
-            [KeyboardButton("📊 Today's Sales"), KeyboardButton("📅 This Week")],
-            [KeyboardButton("📆 Custom Date"), KeyboardButton("ℹ️ Help")]
+            [KeyboardButton("📊 Today's Sales"), KeyboardButton("📆 Custom Date")]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -2685,15 +2684,8 @@ Undelivered ({len(undelivered_orders)}):
         if user_message == "📊 Today's Sales":
             await self.sales_today_command(update, context)
             return
-        elif user_message == "📅 This Week":
-            # Trigger this week's sales - we'll need to create this command
-            await update.message.reply_text("📊 This Week's Sales feature coming soon! Use /today for now.")
-            return
         elif user_message == "📆 Custom Date":
             await self.sales_customdate_command(update, context)
-            return
-        elif user_message == "ℹ️ Help":
-            await self.start_command(update, context)
             return
 
         # Check if user is awaiting date input for custom sales analysis
