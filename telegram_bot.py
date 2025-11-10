@@ -2804,6 +2804,16 @@ Undelivered ({len(undelivered_orders)}):
             replace_existing=True
         )
 
+        # Schedule reports at 7 PM
+        scheduler.add_job(
+            self.send_scheduled_sales_report,
+            trigger=CronTrigger(hour=19, minute=0, timezone=timezone),
+            args=[application],
+            id='sales_report_7pm',
+            name='Daily Sales Report at 7 PM',
+            replace_existing=True
+        )
+
         # Schedule reports at 11 PM
         scheduler.add_job(
             self.send_scheduled_sales_report,
@@ -2816,7 +2826,7 @@ Undelivered ({len(undelivered_orders)}):
 
         # Start the scheduler
         scheduler.start()
-        logger.info(f"Scheduler started - Reports will be sent at 3 PM and 11 PM ({timezone_str})")
+        logger.info(f"Scheduler started - Reports will be sent at 3 PM, 7 PM, and 11 PM ({timezone_str})")
 
         return scheduler
 
