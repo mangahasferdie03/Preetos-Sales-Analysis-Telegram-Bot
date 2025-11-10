@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from google_sheets_client import GoogleSheetsClient
 import anthropic
@@ -1105,7 +1105,28 @@ class TelegramGoogleSheetsBot:
         except Exception as e:
             logger.error(f"Error formatting contextual performance: {e}")
             return f"📈 Performance: ₱{current_revenue:,.0f}\n• Analysis unavailable due to error"
-    
+
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Start command with menu keyboard"""
+        # Create custom keyboard with menu buttons
+        keyboard = [
+            [KeyboardButton("📊 Today's Sales"), KeyboardButton("📅 This Week")],
+            [KeyboardButton("📆 Custom Date"), KeyboardButton("ℹ️ Help")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+        welcome_message = """👋 Welcome to Preetos Sales Analytics Bot!
+
+📊 I can help you analyze sales data from your Google Sheets.
+
+Use the menu buttons below or these commands:
+/today - Today's sales analysis
+/custom - Custom date sales analysis
+
+🤖 Powered by Claude Sonnet 4.5"""
+
+        await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
     async def sales_today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get today's sales analysis with AI insights"""
         if not self.sheets_client or not self.anthropic_client:
@@ -2642,7 +2663,22 @@ Undelivered ({len(undelivered_orders)}):
         """Handle regular text messages"""
         user_message = update.message.text
         user_id = update.effective_user.id
-        
+
+        # Handle menu button presses
+        if user_message == "📊 Today's Sales":
+            await self.sales_today_command(update, context)
+            return
+        elif user_message == "📅 This Week":
+            # Trigger this week's sales - we'll need to create this command
+            await update.message.reply_text("📊 This Week's Sales feature coming soon! Use /today for now.")
+            return
+        elif user_message == "📆 Custom Date":
+            await self.sales_customdate_command(update, context)
+            return
+        elif user_message == "ℹ️ Help":
+            await self.start_command(update, context)
+            return
+
         # Check if user is awaiting date input for custom sales analysis
         if user_id in self.awaiting_date_input and self.awaiting_date_input[user_id]:
             # Remove the user from awaiting list
@@ -2791,6 +2827,7 @@ Undelivered ({len(undelivered_orders)}):
             application = Application.builder().token(self.telegram_token).build()
 
             # Add handlers
+            application.add_handler(CommandHandler("start", self.start_command))
             application.add_handler(CommandHandler("today", self.sales_today_command))
             application.add_handler(CommandHandler("custom", self.sales_customdate_command))
             application.add_handler(CallbackQueryHandler(self.handle_date_button, pattern="^date_"))
