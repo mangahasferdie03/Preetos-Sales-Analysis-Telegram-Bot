@@ -2799,11 +2799,10 @@ Undelivered ({len(undelivered_orders)}):
             # Set up bot commands menu and scheduler
             async def post_init(application):
                 await self.setup_bot_commands(application)
+                # Set up scheduled jobs after event loop is running
+                self.setup_scheduler(application)
 
             application.post_init = post_init
-
-            # Set up scheduled jobs
-            self.setup_scheduler(application)
 
             logger.info("Bot started successfully")
             print("Telegram bot is running...")
